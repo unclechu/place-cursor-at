@@ -1,0 +1,20 @@
+name:         place-cursor-at
+license:      GPL-3
+license-file: LICENSE
+author:       Viacheslav Lotsmanov
+maintainer:   <lotsmanov89@gmail.com>
+category:     System
+
+dependencies:
+  - base
+  - base-unicode-symbols
+  - X11
+
+ghc-options:
+  - -O2
+  - -threaded
+
+executables:
+  place-cursor-at:
+    source-dirs: src
+    main:        place-cursor-at.hs
