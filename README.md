@@ -39,14 +39,14 @@ so it's better to precompile it to reduce startup time.
 
 ## Xinerama note
 
-By default it appears and do its stuff on display where is your mouse cursor.
+By default it appears and do its stuff on display where your mouse cursor is.
 But you can specify which display it should appear on:
 
 ```bash
 $ place-cursor-at 1
 ```
 
-Or on third diplay:
+Or on third display:
 ```bash
 $ place-cursor-at 3
 ```
