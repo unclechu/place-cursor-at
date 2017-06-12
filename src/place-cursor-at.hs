@@ -3,7 +3,6 @@
  --resolver lts-7.22
  --install-ghc
  --package base-unicode-symbols
- --package unix
  --package X11
  -}
 

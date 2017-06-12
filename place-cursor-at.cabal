@@ -20,6 +20,5 @@ executable place-cursor-at
   build-depends:
       base
     , base-unicode-symbols
-    , unix
     , X11
   default-language: Haskell2010
