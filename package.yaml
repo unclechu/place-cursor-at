@@ -8,6 +8,7 @@ category:     System
 dependencies:
   - base
   - base-unicode-symbols
+  - unix
   - X11
 
 ghc-options:

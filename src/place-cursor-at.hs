@@ -3,10 +3,11 @@
  --resolver lts-7.22
  --install-ghc
  --package base-unicode-symbols
+ --package unix
  --package X11
  -}
 
-{-# OPTIONS_GHC -Wall -fno-warn-incomplete-patterns #-}
+{-# OPTIONS_GHC -Wall -fno-warn-incomplete-patterns -fprint-potential-instances #-}
 {-# LANGUAGE UnicodeSyntax #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE LambdaCase #-}
@@ -18,9 +19,10 @@ import Data.Bits ((.|.))
 import Data.Maybe (isJust, fromJust)
 import Data.List (find)
 
-import Control.Monad (forever, forM_)
+import Control.Monad (forever, forM_, filterM)
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (MVar, newEmptyMVar, putMVar, readMVar)
+import Control.Exception (try)
 
 import Graphics.X11.Xlib
 
@@ -29,6 +31,10 @@ import Graphics.X11.Xlib.Extras ( SizeHints (..)
                                 , pMaxSizeBit
                                 , changeProperty8
                                 , propModeReplace
+                                , queryTree
+                                , getTextProperty
+                                , TextProperty (tp_value)
+                                , killClient
                                 )
 
 import Graphics.X11.Xinerama ( xineramaQueryScreens
@@ -40,7 +46,7 @@ import Foreign.ForeignPtr (ForeignPtr, mallocForeignPtr)
 import Foreign.ForeignPtr.Unsafe (unsafeForeignPtrToPtr)
 import Foreign.Storable (Storable (poke))
 import Foreign.C.Types (CInt)
-import Foreign.C.String (castCharToCChar)
+import Foreign.C.String (castCharToCChar, peekCString)
 
 foreign import ccall unsafe "XlibExtras.h XSetWMNormalHints"
   xSetWMNormalHints ∷ Display → Window → Ptr SizeHints → IO ()
@@ -78,6 +84,21 @@ main = do
 
   dpy ← openDisplay ""
   let rootWnd = defaultRootWindow dpy
+
+  -- Killing previous instance
+  fmap (\(_, _, x) → x) (queryTree dpy rootWnd)
+
+    >>= filterM (let f ∷ Window → IO Bool
+                     f x = (try $ mf x ∷ IO (Either IOError Bool))
+                           <&> \case Left _ → False; Right b → b
+
+                     mf ∷ Window → IO Bool
+                     mf x = (fmap tp_value (getTextProperty dpy x wM_CLASS) >>= peekCString)
+                            <&> (≡ "place-cursor-at")
+
+                  in f)
+
+    >>= mapM_ (killClient dpy)
 
   xsn ← getArgs <&> \case [ ] → Nothing
                           [x] → Just (read (x ∷ String) ∷ CInt)
