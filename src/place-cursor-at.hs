@@ -22,6 +22,7 @@ import Control.Monad (forever, forM_, filterM)
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (MVar, newEmptyMVar, putMVar, readMVar)
 import Control.Exception (try)
+import Control.Arrow ((***))
 
 import Graphics.X11.Xlib
 
@@ -60,7 +61,7 @@ fontSize      = 32
 offsetPercent = 10
 
 fontQ ∷ String
-fontQ = "-*-terminus-bold-r-normal-*-" ++ show (fontSize ∷ ℤ) ++ "-*-*-*-*-*-*-*"
+fontQ = "-*-terminus-bold-r-normal-*-" ⧺ show (fontSize ∷ ℤ) ⧺ "-*-*-*-*-*-*-*"
 
 
 data Pos = PosLT | PosCT | PosRT
@@ -103,7 +104,7 @@ main = do
                           [x] → Just (read (x ∷ String) ∷ CInt)
                           (_) → error "Incorrect arguments"
 
-  (mX, mY) ← mousePos dpy rootWnd <&> \(x, y) → (fromInteger x, fromInteger y)
+  (mX, mY) ← mousePos dpy rootWnd <&> (fromInteger *** fromInteger)
 
   xsi ← xineramaQueryScreens dpy
         <&> fromJust
@@ -139,8 +140,8 @@ main = do
       toPosition ∷ ℚ → Position
       toPosition = read ∘ show ∘ (round ∷ ℚ → ℤ)
 
-      windowsPositions ∷ [(String, (Position, Position))]
-      windowsPositions = flip map positions $ \(pos, (text, _)) →
+      windows ∷ [(String, (Position, Position))]
+      windows = flip map positions $ \(pos, (text, _)) →
 
         let x, y ∷ ℚ
             x = xX + relativeX pos - (w ÷ 2)
@@ -157,7 +158,7 @@ main = do
 
          in (keyCode, (toPosition x, toPosition y))
 
-  forM_ windowsPositions $ forkIO ∘ windowInstance done places
+  forM_ windows $ forkIO ∘ windowInstance done places
   waitForDone doneHandler
 
 
@@ -188,7 +189,7 @@ windowInstance done places (text, (wndX, wndY)) = do
   xSetWMNormalHints dpy wnd shPtr
   xSetWMSizeHints dpy wnd shPtr $ pMinSizeBit .|. pMaxSizeBit
 
-  storeName dpy wnd $ "Place Cursor At [" ++ text ++ "]"
+  storeName dpy wnd $ "Place Cursor At [" ⧺ text ⧺ "]"
   changeProperty8 dpy wnd wM_CLASS sTRING propModeReplace $ map castCharToCChar "place-cursor-at"
 
   mapWindow dpy wnd
