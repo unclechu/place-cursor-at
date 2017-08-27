@@ -1,5 +1,5 @@
 all:
-	stack build
+	stack build --install-ghc
 	stack install
 
 clean:

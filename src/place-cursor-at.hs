@@ -1,9 +1,9 @@
 #!/usr/bin/env stack
 {- stack runghc
- --resolver lts-7.22
+ --resolver=lts-9.0
  --install-ghc
- --package base-unicode-symbols
- --package X11
+ --package=base-unicode-symbols
+ --package=X11
  -}
 
 {-# OPTIONS_GHC -Wall -fno-warn-incomplete-patterns -fprint-potential-instances #-}
