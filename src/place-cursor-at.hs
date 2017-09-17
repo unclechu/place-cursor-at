@@ -1,6 +1,6 @@
 #!/usr/bin/env stack
 {- stack runghc
- --resolver=lts-9.0
+ --resolver=lts-9.4
  --install-ghc
  --package=base-unicode-symbols
  --package=X11
@@ -184,7 +184,7 @@ windowInstance done places (text, (wndX, wndY)) = do
   let placeAt ∷ Position → Position → IO ()
       placeAt = placeCursorAt dpy rootWnd
 
-  wnd ← createSimpleWindow dpy rootWnd 0 0 w h 32 whitePx blackPx
+  wnd ← createSimpleWindow dpy rootWnd 0 0 w h 0 whitePx blackPx
   shPtr ← allocSH
   xSetWMNormalHints dpy wnd shPtr
   xSetWMSizeHints dpy wnd shPtr $ pMinSizeBit .|. pMaxSizeBit
