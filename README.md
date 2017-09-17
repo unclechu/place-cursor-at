@@ -3,7 +3,9 @@
 Utility for X11 that helps to move cursor using only keyboard
 written in Haskell.
 
-I made it for myself to use with [xmonad](https://github.com/unclechu/xmonadrc).
+I made it for myself to use with
+[xmonad](https://github.com/unclechu/xmonadrc)
+and [i3](https://github.com/unclechu/i3rc).
 
 ![Screenshot](./screenshot.png)
 
