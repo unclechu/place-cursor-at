@@ -1,6 +1,6 @@
 #!/usr/bin/env stack
 {- stack runghc
- --resolver=lts-9.4
+ --resolver=lts-10.0
  --install-ghc
  --package=base-unicode-symbols
  --package=X11
