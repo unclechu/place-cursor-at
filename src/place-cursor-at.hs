@@ -1,15 +1,11 @@
 #!/usr/bin/env stack
-{- stack runghc
- --resolver=lts-10.0
- --install-ghc
+{- stack script --resolver=lts-10.2 --install-ghc
  --package=base-unicode-symbols
  --package=X11
  -}
 
 {-# OPTIONS_GHC -Wall -fno-warn-incomplete-patterns -fprint-potential-instances #-}
-{-# LANGUAGE UnicodeSyntax #-}
-{-# LANGUAGE MultiWayIf #-}
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE UnicodeSyntax, MultiWayIf, LambdaCase #-}
 
 import Prelude.Unicode
 import System.Environment (getArgs)
