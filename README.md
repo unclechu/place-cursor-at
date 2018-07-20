@@ -1,4 +1,4 @@
-# place-cursor-at
+<p align="left"><img src="logo/logotype_horizontal.png" alt="place-cursor-at" height="100px"></p>
 
 Utility for X11 that helps to move cursor using only keyboard
 written in Haskell.
