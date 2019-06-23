@@ -1,8 +1,10 @@
--- This file has been generated from package.yaml by hpack version 0.20.0.
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.31.1.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: a64de005bc9478e85c7345e72299d53e142c16ca9f14d02cbdcb274418562172
+-- hash: b3f412affa2796410515fca9c72f8e76f5c89d1b6f9f6a83db16ecd92c4fae27
 
 name:           place-cursor-at
 version:        0.0.0
@@ -12,7 +14,6 @@ maintainer:     <lotsmanov89@gmail.com>
 license:        GPL-3
 license-file:   LICENSE
 build-type:     Simple
-cabal-version:  >= 1.10
 
 executable place-cursor-at
   main-is: place-cursor-at.hs
