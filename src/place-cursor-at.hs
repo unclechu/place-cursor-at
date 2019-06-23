@@ -1,24 +1,29 @@
 #!/usr/bin/env stack
-{- stack script --resolver=lts-10.2 --install-ghc
+{- stack script --resolver=lts-13.26 --install-ghc
  --package=base-unicode-symbols
  --package=X11
  -}
 
-{-# OPTIONS_GHC -Wall -fno-warn-incomplete-patterns -fprint-potential-instances #-}
-{-# LANGUAGE UnicodeSyntax, MultiWayIf, LambdaCase #-}
+{-# OPTIONS_GHC -Wall -fprint-potential-instances #-}
+{-# LANGUAGE UnicodeSyntax, MultiWayIf #-}
 
 import Prelude.Unicode
-import System.Environment (getArgs)
 
 import Data.Bits ((.|.))
-import Data.Maybe (isJust, fromJust)
+import Data.Maybe
 import Data.List (find)
+import Data.Char (toUpper)
+import Text.Read (Read (readPrec), lift, choice, readMaybe)
+import Text.ParserCombinators.ReadP (satisfy)
 
-import Control.Monad (forever, forM_, filterM)
+import Control.Applicative ((<|>))
+import Control.Monad (forever, forM_, filterM, foldM, when, void)
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (MVar, newEmptyMVar, putMVar, readMVar)
 import Control.Exception (try)
-import Control.Arrow ((***))
+import Control.Arrow ((***), (&&&))
+
+import System.Environment (getArgs)
 
 import Graphics.X11.Xlib
 
@@ -65,6 +70,18 @@ data Pos = PosLT | PosCT | PosRT
          | PosLB | PosCB | PosRB
            deriving (Eq, Show)
 
+instance Read Pos where
+  readPrec = go where
+    go = choice $ lift <$> x
+    insStr a b = void $ satisfy ((a ≡) ∘ toUpper) *> satisfy ((b ≡) ∘ toUpper)
+
+    x =
+      [ PosLT <$ insStr 'L' 'T', PosCT <$ insStr 'C' 'T', PosRT <$ insStr 'R' 'T'
+      , PosLC <$ insStr 'L' 'C', PosCC <$ insStr 'C' 'C', PosRC <$ insStr 'R' 'C'
+      , PosLB <$ insStr 'L' 'B', PosCB <$ insStr 'C' 'B', PosRB <$ insStr 'R' 'B'
+      ]
+
+
 positions ∷ [ (Pos, (String, KeyCode)) ]
 positions = [ (PosLT, ("Q", 24)), (PosCT, ("W", 25)), (PosRT, ("E", 26))
             , (PosLC, ("A", 38)), (PosCC, ("S", 39)), (PosRC, ("D", 40))
@@ -72,21 +89,32 @@ positions = [ (PosLT, ("Q", 24)), (PosCT, ("W", 25)), (PosRT, ("E", 26))
             ]
 
 
+-- | Command-line arguments
+data Argv
+   = Argv
+   { argvOnDisplay  ∷ Maybe CInt -- ^ Jump to specific display
+   , argvToPosition ∷ Maybe Pos  -- ^ Jump to specific position on screen (GUI wont be shown)
+   } deriving (Show, Eq)
+
+emptyArgv ∷ Argv
+emptyArgv = Argv Nothing Nothing
+
+
 main ∷ IO ()
 main = do
 
   doneHandler ← getDoneHandler
-  let done ∷ IO (); done = doneIt doneHandler
+  let done = doneIt doneHandler ∷ IO ()
 
   dpy ← openDisplay ""
   let rootWnd = defaultRootWindow dpy
 
-  -- Killing previous instance
+  -- Killing previous instance (works for xmonad but not for i3wm)
   fmap (\(_, _, x) → x) (queryTree dpy rootWnd)
 
     >>= filterM (let f ∷ Window → IO Bool
                      f x = (try $ mf x ∷ IO (Either IOError Bool))
-                           <&> \case Left _ → False; Right b → b
+                           <&> either (const False) id
 
                      mf ∷ Window → IO Bool
                      mf x = (fmap tp_value (getTextProperty dpy x wM_CLASS) >>= peekCString)
@@ -96,9 +124,15 @@ main = do
 
     >>= mapM_ (killClient dpy)
 
-  xsn ← getArgs <&> \case [ ] → Nothing
-                          [x] → Just (read (x ∷ String) ∷ CInt)
-                          (_) → error "Incorrect arguments"
+  (xsn, justGoToPos') ←
+    let
+      reducer argv x =
+        case (readMaybe x <&> \x' → argv { argvOnDisplay  = Just x' })
+         <|> (readMaybe x <&> \x' → argv { argvToPosition = Just x' })
+          of Just updatedArgv → pure updatedArgv
+             Nothing → fail $ "Unexpected argument: " ⧺ show x
+    in
+      (getArgs >>= foldM reducer emptyArgv) <&> (argvOnDisplay &&& argvToPosition)
 
   (mX, mY) ← mousePos dpy rootWnd <&> (fromInteger *** fromInteger)
 
@@ -112,7 +146,9 @@ main = do
                                     in mX ≥ x1 ∧ mY ≥ y1
                                      ∧ mX < x2 ∧ mY < y2
 
-  xsi `seq` closeDisplay dpy
+  seq xsi $
+    when (isNothing justGoToPos') $
+      closeDisplay dpy
 
   let xX, xY, xW, xH ∷ ℚ
       relativeX, relativeY ∷ Pos → ℚ
@@ -127,11 +163,13 @@ main = do
         | pos ∈ [PosLT, PosLC, PosLB] = xW ⋅ offsetPercent ÷ 100
         | pos ∈ [PosCT, PosCC, PosCB] = xW ÷ 2
         | pos ∈ [PosRT, PosRC, PosRB] = xW ⋅ (100 - offsetPercent) ÷ 100
+        | otherwise = error "Unexpected behavior"
 
       relativeY pos
         | pos ∈ [PosLT, PosCT, PosRT] = xH ⋅ offsetPercent ÷ 100
         | pos ∈ [PosLC, PosCC, PosRC] = xH ÷ 2
         | pos ∈ [PosLB, PosCB, PosRB] = xH ⋅ (100 - offsetPercent) ÷ 100
+        | otherwise = error "Unexpected behavior"
 
       toPosition ∷ ℚ → Position
       toPosition = read ∘ show ∘ (round ∷ ℚ → ℤ)
@@ -145,17 +183,28 @@ main = do
 
          in (text, (toPosition x, toPosition y))
 
-      places ∷ [(KeyCode, (Position, Position))]
+      places ∷ [((Pos, KeyCode), (Position, Position))]
       places = flip map positions $ \(pos, (_, keyCode)) →
 
         let x, y ∷ ℚ
             x = xX + relativeX pos
             y = xY + relativeY pos
 
-         in (keyCode, (toPosition x, toPosition y))
+         in ((pos, keyCode), (toPosition x, toPosition y))
 
-  forM_ windows $ forkIO ∘ windowInstance done places
-  waitForDone doneHandler
+  case justGoToPos' of
+       Just pos →
+         case lookup pos $ places <&> \((pos', _), coords) → (pos', coords) of
+              Just (x, y) → do
+                placeCursorAt dpy rootWnd x y
+                closeDisplay dpy
+
+              Nothing → fail $ "Unexpectedly fail to find a 'place' by " ⧺ show pos
+
+       Nothing → do
+         let places' = places <&> \((_, keyCode), coords) → (keyCode, coords)
+         forM_ windows $ forkIO ∘ windowInstance done places'
+         waitForDone doneHandler
 
 
 windowInstance ∷ IO ()
@@ -254,11 +303,11 @@ handleKey ∷ IO ()
 handleKey done placeAt places text keyCode
   | keyCode ≡ 9  = done -- Escape
   | keyCode ≡ 36 = handleKey done placeAt places (⊥) currentWindowKeyCode -- Enter
-  | isJust found = placeAt (fst $ fromJust found) (snd $ fromJust found) >> done
+  | isJust found = uncurry placeAt (fromJust found) >> done
   | otherwise    = return ()
 
   where found = snd <$> find ((≡ keyCode) ∘ fst) places
-        currentWindowKeyCode = fromJust $ fmap (snd ∘ snd) $ find ((≡ text) ∘ fst ∘ snd) positions
+        currentWindowKeyCode = fromJust $ snd ∘ snd <$> find ((≡ text) ∘ fst ∘ snd) positions
 
 
 draw ∷ Display → Window → GC → FontStruct → String → IO ()
