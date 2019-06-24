@@ -17,15 +17,15 @@ and [i3](https://github.com/unclechu/i3rc).
 ## How to use
 
 ```bash
-$ stack build
-$ stack exec place-cursor-at
+stack build
+stack exec place-cursor-at
 ```
 
 You could install `place-cursor-at` binary to `~/.local/bin` directory
 (make sure you have this directory in your `PATH` environment variable):
 
 ```bash
-$ stack install
+stack install
 ```
 
 ## Using it as script
@@ -33,7 +33,7 @@ $ stack install
 It could be started as [stack](https://haskellstack.org/)-script:
 
 ```bash
-$ src/place-cursor-at.hs
+src/place-cursor-at.hs
 ```
 
 But it is supposed to be used very often and to be very responsive,
@@ -45,13 +45,55 @@ By default it appears and do its stuff on display where your mouse cursor is.
 But you can specify which display it should appear on:
 
 ```bash
-$ place-cursor-at 1
+place-cursor-at 1
 ```
 
 Or on third display:
+
 ```bash
-$ place-cursor-at 3
+place-cursor-at 3
 ```
+
+## Jump to specific position without GUI
+
+You can immediately jump to specific position of a screen without showing any
+GUI, like this:
+
+```bash
+place-cursor-at LT
+```
+
+It's case-insensitive, this also would work:
+
+```bash
+place-cursor-at lt
+```
+
+And you also can specify a display you want to jump to:
+
+```bash
+place-cursor-at lt 1
+```
+
+In any order of arguments:
+
+```bash
+place-cursor-at 1 lt
+```
+
+### Codes of available positions
+
+| Code | Deciphering           |
+| -    | -                     |
+| `LT` | **L**eft-**T**op      |
+| `LC` | **L**eft-**C**enter   |
+| `LB` | **L**eft-**B**ottom   |
+| `CT` | **C**enter-**T**op    |
+| `CC` | **C**enter-**C**enter |
+| `CB` | **C**enter-**B**ottom |
+| `RT` | **R**ight-**T**op     |
+| `RC` | **R**ight-**C**enter  |
+| `RB` | **R**ight-**B**ottom  |
 
 ## Author
 
