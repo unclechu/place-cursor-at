@@ -1,5 +1,5 @@
 #!/usr/bin/env stack
-{- stack script --resolver=lts-13.26 --install-ghc
+{- stack script --resolver=lts-15.3 --install-ghc
  --package=base-unicode-symbols
  --package=X11
  -}
