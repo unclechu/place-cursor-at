@@ -269,7 +269,7 @@ placeWindowAt ∷ Display → Window → Position → Position → IO ()
 placeWindowAt dpy wnd x y = moveResizeWindow dpy wnd x y w h
 
 placeCursorAt ∷ Display → Window → Position → Position → IO ()
-placeCursorAt dpy wnd x y = warpPointer dpy wnd wnd 0 0 0 0 x y
+placeCursorAt dpy wnd x y = f where f = warpPointer dpy wnd wnd 0 0 0 0 x y
 
 
 evLoop ∷ IO ()

@@ -14,6 +14,9 @@ ghc-options:
   - -O2
   - -threaded
 
+extra-libraries:
+  - Xinerama
+
 executables:
   place-cursor-at:
     source-dirs: src
