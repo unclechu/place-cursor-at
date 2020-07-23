@@ -6,9 +6,9 @@ maintainer:   <lotsmanov89@gmail.com>
 category:     System
 
 dependencies:
-  - base
-  - base-unicode-symbols
-  - X11
+  - base >= 4.12 && < 5
+  - base-unicode-symbols ^>= 0.2
+  - X11 >= 1.9 && < 2
 
 ghc-options:
   - -O2
