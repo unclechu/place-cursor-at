@@ -11,8 +11,8 @@ and [i3](https://github.com/unclechu/i3rc).
 
 ## Requirements
 
-- [Haskell Tool Stack](https://haskellstack.org/)
-- Development files of `libX11`
+- Either [Nix Package Manager] or [The Haskell Tool Stack]
+- `libX11` and `libXinerama` with development files
 
 ## How to use
 
