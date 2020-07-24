@@ -1,8 +1,6 @@
-#!/usr/bin/env stack
-{- stack script --resolver=lts-15.3 --install-ghc
- --package=base-unicode-symbols
- --package=X11
- -}
+#! /usr/bin/env nix-shell
+#! nix-shell -i runhaskell
+#! nix-shell -E "let ghc = n.haskellPackages.ghcWithPackages (p: [p.base-unicode-symbols p.X11]); d = n.mkShell { buildInputs = [ghc]; }; n = import (fetchTarball { url = \"https://github.com/NixOS/nixpkgs/archive/db31e48c5c8d99dcaf4e5883a96181f6ac4ad6f6.tar.gz\"; sha256 = \"1j5j7vbnq2i5zyl8498xrf490jca488iw6hylna3lfwji6rlcaqr\"; }) {}; in d"
 
 {-# OPTIONS_GHC -Wall -fprint-potential-instances #-}
 {-# LANGUAGE UnicodeSyntax, MultiWayIf #-}

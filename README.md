@@ -70,7 +70,10 @@ alias stack='stack --system-ghc'
 
 ## Using it as script
 
-It could be started as [stack](https://haskellstack.org/)-script:
+You also could run it as a script
+(`nix-shell` script, so you have to
+[install Nix Package Manager](https://nixos.org/nix/manual/#chap-installation)
+first):
 
 ```bash
 src/place-cursor-at.hs
