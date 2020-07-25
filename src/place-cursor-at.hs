@@ -8,18 +8,19 @@
 import Prelude.Unicode
 
 import Data.Bits ((.|.))
-import Data.Maybe
-import Data.List (find)
 import Data.Char (toUpper)
-import Text.Read (Read (readPrec), lift, choice, readMaybe)
+import Data.Functor ((<&>))
+import Data.List (find)
+import Data.Maybe
 import Text.ParserCombinators.ReadP (satisfy)
+import Text.Read (Read (readPrec), lift, choice, readMaybe)
 
 import Control.Applicative ((<|>))
-import Control.Monad (forever, forM_, filterM, foldM, when, void)
-import Control.Concurrent (forkIO)
-import Control.Concurrent.MVar (MVar, newEmptyMVar, putMVar, readMVar)
-import Control.Exception (try)
 import Control.Arrow ((***), (&&&))
+import Control.Concurrent (forkIO)
+import Control.Concurrent.MVar (newEmptyMVar, putMVar, readMVar)
+import Control.Exception (try)
+import Control.Monad (forever, forM_, filterM, foldM, when, void)
 
 import System.Environment (getArgs)
 
@@ -40,12 +41,12 @@ import Graphics.X11.Xinerama ( xineramaQueryScreens
                              , XineramaScreenInfo (..)
                              )
 
-import Foreign.Ptr (Ptr)
+import Foreign.C.String (castCharToCChar, peekCString)
+import Foreign.C.Types (CInt)
 import Foreign.ForeignPtr (ForeignPtr, mallocForeignPtr)
 import Foreign.ForeignPtr.Unsafe (unsafeForeignPtrToPtr)
+import Foreign.Ptr (Ptr)
 import Foreign.Storable (Storable (poke))
-import Foreign.C.Types (CInt)
-import Foreign.C.String (castCharToCChar, peekCString)
 
 foreign import ccall unsafe "XlibExtras.h XSetWMNormalHints"
   xSetWMNormalHints ∷ Display → Window → Ptr SizeHints → IO ()
@@ -101,8 +102,8 @@ emptyArgv = Argv Nothing Nothing
 main ∷ IO ()
 main = do
 
-  doneHandler ← getDoneHandler
-  let done = doneIt doneHandler ∷ IO ()
+  doneHandler ← mkDoneHandler
+  let done = doneWithIt doneHandler ∷ IO ()
 
   dpy ← openDisplay ""
   let rootWnd = defaultRootWindow dpy
@@ -202,7 +203,7 @@ main = do
        Nothing → do
          let places' = places <&> \((_, keyCode), coords) → (keyCode, coords)
          forM_ windows $ forkIO ∘ windowInstance done places'
-         waitForDone doneHandler
+         waitBeforeItIsDone doneHandler
 
 
 windowInstance ∷ IO ()
@@ -324,20 +325,13 @@ draw dpy wnd gc fontStruct text = drawString dpy wnd gc textXPos textYPos text
                     in read $ show (round $ wndCenter + textCenter ∷ Int)
 
 
-type DoneHandler = MVar ()
+data DoneApi = DoneApi
+   { doneWithIt         ∷ IO ()
+   , waitBeforeItIsDone ∷ IO ()
+   }
 
-getDoneHandler ∷ IO DoneHandler
-getDoneHandler = newEmptyMVar
-
-doneIt ∷ DoneHandler → IO ()
-doneIt = flip putMVar ()
-
-waitForDone ∷ DoneHandler → IO ()
-waitForDone = readMVar
-
-
-(<&>) ∷ Functor f ⇒ f a → (a → b) → f b
-(<&>) = flip (<$>)
-infixr 5 <&>
-
--- vim:et:ts=2:sts=2:sw=2:cc=101:tw=100:
+mkDoneHandler ∷ IO DoneApi
+mkDoneHandler = newEmptyMVar <&> \mvar → DoneApi
+  { doneWithIt         = putMVar mvar ()
+  , waitBeforeItIsDone = readMVar mvar
+  }
