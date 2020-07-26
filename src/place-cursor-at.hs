@@ -3,7 +3,8 @@
 #! nix-shell -E "let ghc = n.haskellPackages.ghcWithPackages (p: [p.base-unicode-symbols p.X11]); d = n.mkShell { buildInputs = [ghc]; }; n = import (fetchTarball { url = \"https://github.com/NixOS/nixpkgs/archive/db31e48c5c8d99dcaf4e5883a96181f6ac4ad6f6.tar.gz\"; sha256 = \"1j5j7vbnq2i5zyl8498xrf490jca488iw6hylna3lfwji6rlcaqr\"; }) {}; in d"
 
 {-# OPTIONS_GHC -Wall -fprint-potential-instances #-}
-{-# LANGUAGE UnicodeSyntax, MultiWayIf #-}
+{-# LANGUAGE UnicodeSyntax, MultiWayIf, ViewPatterns, ScopedTypeVariables #-}
+{-# LANGUAGE DerivingStrategies, GeneralizedNewtypeDeriving #-}
 
 import Prelude.Unicode
 
@@ -12,8 +13,9 @@ import Data.Char (toUpper)
 import Data.Functor ((<&>))
 import Data.List (find)
 import Data.Maybe
+import Numeric.Natural
 import Text.ParserCombinators.ReadP (satisfy)
-import Text.Read (Read (readPrec), lift, choice, readMaybe)
+import Text.Read (ReadPrec, Read (readPrec), lift, choice, readMaybe)
 
 import Control.Applicative ((<|>))
 import Control.Arrow ((***), (&&&))
@@ -42,7 +44,6 @@ import Graphics.X11.Xinerama ( xineramaQueryScreens
                              )
 
 import Foreign.C.String (castCharToCChar, peekCString)
-import Foreign.C.Types (CInt)
 import Foreign.ForeignPtr (ForeignPtr, mallocForeignPtr)
 import Foreign.ForeignPtr.Unsafe (unsafeForeignPtrToPtr)
 import Foreign.Ptr (Ptr)
@@ -59,6 +60,7 @@ s, w, h, fontSize, offsetPercent ∷ Num a ⇒ a
 s = 40; w = s; h = s
 fontSize      = 32
 offsetPercent = 10
+
 
 fontQ ∷ String
 fontQ = "-*-terminus-bold-r-normal-*-" ⧺ show (fontSize ∷ ℤ) ⧺ "-*-*-*-*-*-*-*"
@@ -91,37 +93,36 @@ positions = [ (PosLT, ("Q", 24)), (PosCT, ("W", 25)), (PosRT, ("E", 26))
 -- | Command-line arguments
 data Argv
    = Argv
-   { argvOnDisplay  ∷ Maybe CInt -- ^ Jump to specific display
-   , argvToPosition ∷ Maybe Pos  -- ^ Jump to specific position on screen (GUI wont be shown)
+   { argvOnDisplay  ∷ Maybe SpecificScreenNumber
+   -- ^ Jump to specific display
+   , argvToPosition ∷ Maybe Pos
+   -- ^ Jump to specific position on screen (GUI wont be shown)
    } deriving (Show, Eq)
 
 emptyArgv ∷ Argv
 emptyArgv = Argv Nothing Nothing
 
 
+newtype SpecificScreenNumber
+      = SpecificScreenNumber { fromSpecificScreenNumber ∷ Natural }
+        deriving newtype (Eq, Enum)
+
+instance Show SpecificScreenNumber where
+  show = fromSpecificScreenNumber • succ • show
+
+instance Read SpecificScreenNumber where
+  readPrec =
+    (readPrec ∷ ReadPrec Natural) >>= \x →
+      if x ≡ 0
+      then fail $ "Incorrect screen number " ⧺ show x ⧺ " (must start with 1)"
+      else pure $ pred $ SpecificScreenNumber x
+
+
 main ∷ IO ()
 main = do
-
   doneHandler ← mkDoneHandler
-  let done = doneWithIt doneHandler ∷ IO ()
-
-  dpy ← openDisplay ""
-  let rootWnd = defaultRootWindow dpy
-
-  -- Killing previous instance (works for xmonad but not for i3wm)
-  fmap (\(_, _, x) → x) (queryTree dpy rootWnd)
-
-    >>= filterM (let f ∷ Window → IO Bool
-                     f x = (try $ mf x ∷ IO (Either IOError Bool))
-                           <&> either (const False) id
-
-                     mf ∷ Window → IO Bool
-                     mf x = (fmap tp_value (getTextProperty dpy x wM_CLASS) >>= peekCString)
-                            <&> (≡ "place-cursor-at")
-
-                  in f)
-
-    >>= mapM_ (killClient dpy)
+  (dpy, rootWnd) ← (id &&& defaultRootWindow) <$> openDisplay ""
+  killPreviousInstanceIfExists dpy
 
   (xsn, justGoToPos') ←
     let
@@ -133,17 +134,7 @@ main = do
     in
       (getArgs >>= foldM reducer emptyArgv) <&> (argvOnDisplay &&& argvToPosition)
 
-  (mX, mY) ← mousePos dpy rootWnd <&> (fromInteger *** fromInteger)
-
-  xsi ← xineramaQueryScreens dpy
-        <&> fromJust
-        <&> \list → fromJust $ flip find list $
-               case xsn of
-                    Just x  → (≡ x) ∘ (+ 1) ∘ xsi_screen_number
-                    Nothing → \e → let (x1, y1) = (xsi_x_org e, xsi_y_org e)
-                                       (x2, y2) = (x1 + xsi_width e, y1 + xsi_height e)
-                                    in mX ≥ x1 ∧ mY ≥ y1
-                                     ∧ mX < x2 ∧ mY < y2
+  xsi ← getScreenInfo dpy xsn
 
   seq xsi $
     when (isNothing justGoToPos') $
@@ -202,8 +193,79 @@ main = do
 
        Nothing → do
          let places' = places <&> \((_, keyCode), coords) → (keyCode, coords)
-         forM_ windows $ forkIO ∘ windowInstance done places'
+         forM_ windows $ forkIO ∘ windowInstance (doneWithIt doneHandler) places'
          waitBeforeItIsDone doneHandler
+
+
+-- | Kill previous instance of *place-cursor-at*.
+--
+-- FIXME Works for Xmonad but not for i3wm.
+killPreviousInstanceIfExists ∷ Display → IO ()
+killPreviousInstanceIfExists dpy = go where
+  go =
+    getAllWindowsList
+    >>= filterM isPlaceCursorAtWindow
+    >>= mapM_ (killClient dpy)
+
+  getAllWindowsList ∷ IO [Window]
+  getAllWindowsList = queryTree dpy (defaultRootWindow dpy) <&> \(_, _, x) → x
+
+  isPlaceCursorAtWindow ∷ Window → IO 𝔹
+  isPlaceCursorAtWindow wnd = x where
+    x = try matchByWindowClass <&> either (const False ∷ IOError → 𝔹) id
+
+    matchByWindowClass =
+      getTextProperty dpy wnd wM_CLASS
+      >>= tp_value • peekCString
+      >>= (≡ "place-cursor-at") • pure
+
+
+-- | Get info about screen either under cursor or specified by an argument.
+getScreenInfo ∷ Display → Maybe SpecificScreenNumber → IO XineramaScreenInfo
+getScreenInfo dpy specificScreen = go where
+  xineramaFailureMsg
+    = "Could not obtain Xinerama screens information, "
+    ⧺ "check that libXinerama dependency is installed "
+    ⧺ "and Xinerama X11 extension is active!"
+
+  isSpecifiedScreen ∷ SpecificScreenNumber → XineramaScreenInfo → 𝔹
+  isSpecifiedScreen (SpecificScreenNumber (toInteger • fromInteger → n)) =
+    xsi_screen_number • succ • (≡ n)
+
+  isScreenUnderCursor ∷ (ℤ, ℤ) → XineramaScreenInfo → 𝔹
+  isScreenUnderCursor (mX, mY) screenInfo = x where
+    f        = fromIntegral
+    (x1, y1) = (f (xsi_x_org screenInfo),      f (xsi_y_org screenInfo))
+    (x2, y2) = (x1 + f (xsi_width screenInfo), y1 + f (xsi_height screenInfo))
+    x        = (mX ≥ x1 ∧ mY ≥ y1) ∧ (mX < x2 ∧ mY < y2)
+
+  go = do
+    screens ←
+      xineramaQueryScreens dpy >>=
+        maybe (fail xineramaFailureMsg) pure
+
+    (predicateFn ∷ XineramaScreenInfo → 𝔹, failureMsg ∷ String) ←
+      case specificScreen of
+           Nothing → do
+             mouseCoords ← mousePos dpy (defaultRootWindow dpy) <&> (fromIntegral *** fromIntegral)
+
+             let
+               failureMsg
+                 = "Could not find a screen which is under cursor, something went wrong "
+                 ⧺ "(mouse position: " ⧺ show mouseCoords ⧺ ", screens: " ⧺ show screens ⧺ ")"
+
+             pure (isScreenUnderCursor mouseCoords, failureMsg)
+
+           Just screenNum →
+             let
+               failureMsg
+                 = "Could not find screen by number " ⧺ show (succ screenNum) ⧺ ", "
+                 ⧺ "specified screen number must be out of range "
+                 ⧺ "(screens: " ⧺ show screens ⧺ ")"
+             in
+               pure (isSpecifiedScreen screenNum, failureMsg)
+
+    maybe (fail failureMsg) pure (find predicateFn screens)
 
 
 windowInstance ∷ IO ()
@@ -215,18 +277,20 @@ windowInstance done places (text, (wndX, wndY)) = do
 
   dpy ← openDisplay ""
 
-  let rootWnd = defaultRootWindow dpy
-      screen  = defaultScreen     dpy
-      gc      = defaultGC         dpy screen
-      blackPx = blackPixel        dpy screen
-      whitePx = whitePixel        dpy screen
+  let
+    rootWnd = defaultRootWindow dpy
+    screen  = defaultScreen     dpy
+    gc      = defaultGC         dpy screen
+    blackPx = blackPixel        dpy screen
+    whitePx = whitePixel        dpy screen
 
   fontStruct ← loadQueryFont dpy fontQ
   setFont dpy gc $ fontFromFontStruct fontStruct
   setForeground dpy gc whitePx
 
-  let placeAt ∷ Position → Position → IO ()
-      placeAt = placeCursorAt dpy rootWnd
+  let
+    placeAt ∷ Position → Position → IO ()
+    placeAt = placeCursorAt dpy rootWnd
 
   wnd ← createSimpleWindow dpy rootWnd 0 0 w h 0 whitePx blackPx
   shPtr ← allocSH
@@ -244,22 +308,23 @@ windowInstance done places (text, (wndX, wndY)) = do
 
 
 allocSH ∷ IO (Ptr SizeHints)
-allocSH = (unsafeForeignPtrToPtr <$> malloc) >>= (\ptr → ptr <$ poke ptr sh)
+allocSH = go where
+  go = malloc <&> unsafeForeignPtrToPtr >>= \ptr → ptr <$ poke ptr sh
 
-  where malloc ∷ IO (ForeignPtr SizeHints)
-        malloc = mallocForeignPtr
+  malloc ∷ IO (ForeignPtr SizeHints)
+  malloc = mallocForeignPtr
 
-        sh ∷ SizeHints
-        sh = SizeHints { sh_min_size    = Just (w, h)
-                       , sh_max_size    = Just (w, h)
-                       , sh_resize_inc  = Nothing
-                       , sh_aspect      = Nothing
-                       , sh_base_size   = Nothing
-                       , sh_win_gravity = Nothing
-                       }
+  sh ∷ SizeHints
+  sh = SizeHints { sh_min_size    = Just (w, h)
+                 , sh_max_size    = Just (w, h)
+                 , sh_resize_inc  = Nothing
+                 , sh_aspect      = Nothing
+                 , sh_base_size   = Nothing
+                 , sh_win_gravity = Nothing
+                 }
 
 
-mousePos ∷ Display → Window → IO (Integer, Integer)
+mousePos ∷ Display → Window → IO (ℤ, ℤ)
 mousePos dpy wnd = f <$> queryPointer dpy wnd
   where f (_, _, _, rootX, rootY, _, _, _) = (toInteger rootX, toInteger rootY)
 
@@ -280,16 +345,14 @@ evLoop ∷ IO ()
        → IO ()
 
 evLoop done dpy wnd gc fontStruct placeAt text places evPtr = do
-
   nextEvent dpy evPtr
   evType ← get_EventType evPtr
+  let getKeyCode (_, _, _, _, _, _, _, _, keyCode, _) = keyCode
 
   if
-   | evType ≡ keyPress → fmap getKeyCode (get_KeyEvent evPtr) >>= handleKey done placeAt places text
+   | evType ≡ keyPress → get_KeyEvent evPtr <&> getKeyCode >>= handleKey done placeAt places text
    | evType ≡ expose   → draw dpy wnd gc fontStruct text
-   | otherwise         → return ()
-
-  where getKeyCode (_, _, _, _, _, _, _, _, keyCode, _) = keyCode
+   | otherwise         → pure ()
 
 
 handleKey ∷ IO ()
@@ -303,26 +366,28 @@ handleKey done placeAt places text keyCode
   | keyCode ≡ 9  = done -- Escape
   | keyCode ≡ 36 = handleKey done placeAt places (⊥) currentWindowKeyCode -- Enter
   | isJust found = uncurry placeAt (fromJust found) >> done
-  | otherwise    = return ()
-
-  where found = snd <$> find ((≡ keyCode) ∘ fst) places
-        currentWindowKeyCode = fromJust $ snd ∘ snd <$> find ((≡ text) ∘ fst ∘ snd) positions
+  | otherwise    = pure ()
+  where
+    found = snd <$> find ((≡ keyCode) ∘ fst) places
+    currentWindowKeyCode = fromJust $ snd ∘ snd <$> find ((≡ text) ∘ fst ∘ snd) positions
 
 
 draw ∷ Display → Window → GC → FontStruct → String → IO ()
-draw dpy wnd gc fontStruct text = drawString dpy wnd gc textXPos textYPos text
+draw dpy wnd gc fontStruct text = go where
+  go = drawString dpy wnd gc textXPos textYPos text
+  tw = textWidth fontStruct text
 
-  where tw = textWidth fontStruct text
+  textXPos, textYPos ∷ Position
 
-        textXPos, textYPos ∷ Position
+  textXPos = x where
+    x = read $ show (round $ wndCenter - textCenter ∷ Int)
+    wndCenter = fromIntegral (w ∷ ℤ) ÷ 2 ∷ Float
+    textCenter = fromIntegral tw ÷ 2 ∷ Float
 
-        textXPos = let wndCenter = fromIntegral (w ∷ ℤ) ÷ 2 ∷ Float
-                       textCenter = fromIntegral tw ÷ 2 ∷ Float
-                    in read $ show (round $ wndCenter - textCenter ∷ Int)
-
-        textYPos = let wndCenter = fromIntegral (h ∷ ℤ) ÷ 2 ∷ Float
-                       textCenter = fontSize ÷ 4 ∷ Float
-                    in read $ show (round $ wndCenter + textCenter ∷ Int)
+  textYPos = x where
+    x = read $ show (round $ wndCenter + textCenter ∷ Int)
+    wndCenter = fromIntegral (h ∷ ℤ) ÷ 2 ∷ Float
+    textCenter = fontSize ÷ 4 ∷ Float
 
 
 data DoneApi = DoneApi
@@ -335,3 +400,11 @@ mkDoneHandler = newEmptyMVar <&> \mvar → DoneApi
   { doneWithIt         = putMVar mvar ()
   , waitBeforeItIsDone = readMVar mvar
   }
+
+
+(•) ∷ (a → b) → (b → c) → a → c
+(•) = flip (∘)
+infixl 9 •
+{-# INLINE (•) #-}
+
+type 𝔹 = Bool
