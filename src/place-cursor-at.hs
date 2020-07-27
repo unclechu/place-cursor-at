@@ -3,12 +3,13 @@
 #! nix-shell -E "let ghc = n.haskellPackages.ghcWithPackages (p: [p.base-unicode-symbols p.X11]); d = n.mkShell { buildInputs = [ghc]; }; n = import (fetchTarball { url = \"https://github.com/NixOS/nixpkgs/archive/db31e48c5c8d99dcaf4e5883a96181f6ac4ad6f6.tar.gz\"; sha256 = \"1j5j7vbnq2i5zyl8498xrf490jca488iw6hylna3lfwji6rlcaqr\"; }) {}; in d"
 
 {-# OPTIONS_GHC -Wall -fprint-potential-instances #-}
-{-# LANGUAGE UnicodeSyntax, MultiWayIf, ViewPatterns, ScopedTypeVariables #-}
+{-# LANGUAGE UnicodeSyntax, MultiWayIf, ViewPatterns, ScopedTypeVariables, GADTs #-}
 {-# LANGUAGE DerivingStrategies, GeneralizedNewtypeDeriving #-}
 
 import Prelude.Unicode
 
 import Data.Bits ((.|.))
+import Data.Bool (bool)
 import Data.Char (toUpper)
 import Data.Functor ((<&>))
 import Data.List (find)
@@ -22,7 +23,7 @@ import Control.Arrow ((***), (&&&))
 import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, readMVar)
 import Control.Exception (try)
-import Control.Monad (forever, forM_, filterM, foldM, when, void)
+import Control.Monad (forever, forM_, foldM, when, void)
 
 import System.Environment (getArgs)
 
@@ -64,6 +65,10 @@ offsetPercent = 10
 
 fontQ ∷ String
 fontQ = "-*-terminus-bold-r-normal-*-" ⧺ show (fontSize ∷ ℤ) ⧺ "-*-*-*-*-*-*-*"
+
+
+windowClassName ∷ String
+windowClassName = "place-cursor-at"
 
 
 data Pos = PosLT | PosCT | PosRT
@@ -199,16 +204,36 @@ main = do
 
 -- | Kill previous instance of *place-cursor-at*.
 --
--- FIXME Works for Xmonad but not for i3wm.
+-- FIXME In some cases it fails the killer with this exception in the log:
+--
+-- @
+-- X Error of failed request:  BadValue (integer parameter out of range for operation)
+--   Major opcode of failed request:  113 (X_KillClient)
+--   Value in failed request:  0x6000002
+--   Serial number of failed request:  259
+--   Current serial number in output stream:  260
+-- @
+--
+-- I have no idea what the heck is this. I tried many ways to fix this with no success.
 killPreviousInstanceIfExists ∷ Display → IO ()
 killPreviousInstanceIfExists dpy = go where
-  go =
-    getAllWindowsList
-    >>= filterM isPlaceCursorAtWindow
-    >>= mapM_ (killClient dpy)
+  go = traverseChildWindows (defaultRootWindow dpy)
+  kill = killClient dpy
 
-  getAllWindowsList ∷ IO [Window]
-  getAllWindowsList = queryTree dpy (defaultRootWindow dpy) <&> \(_, _, x) → x
+  traverseChildWindows ∷ Window → IO ()
+  traverseChildWindows wnd = killEmRecursively where
+    killEmRecursively =
+      getAllWindowsList wnd
+      >>= foldM reducer mempty
+      >>= (mapM_ kill *** mapM_ traverseChildWindows) • uncurry (>>)
+
+    reducer ∷ acc ~ ([Window], [Window]) ⇒ acc → Window → IO acc
+    reducer acc x = f where
+      f = isPlaceCursorAtWindow x <&> \is → (x `appendIf` is *** x `appendIf` not is) acc
+      appendIf wndToAppend = bool id (⧺ [wndToAppend])
+
+  getAllWindowsList ∷ Window → IO [Window]
+  getAllWindowsList wnd = queryTree dpy wnd <&> \(_, _, x) → x
 
   isPlaceCursorAtWindow ∷ Window → IO 𝔹
   isPlaceCursorAtWindow wnd = x where
@@ -217,7 +242,7 @@ killPreviousInstanceIfExists dpy = go where
     matchByWindowClass =
       getTextProperty dpy wnd wM_CLASS
       >>= tp_value • peekCString
-      >>= (≡ "place-cursor-at") • pure
+      >>= (≡ windowClassName) • pure
 
 
 -- | Get info about screen either under cursor or specified by an argument.
@@ -298,7 +323,7 @@ windowInstance done places (text, (wndX, wndY)) = do
   xSetWMSizeHints dpy wnd shPtr $ pMinSizeBit .|. pMaxSizeBit
 
   storeName dpy wnd $ "Place Cursor At [" ⧺ text ⧺ "]"
-  changeProperty8 dpy wnd wM_CLASS sTRING propModeReplace $ map castCharToCChar "place-cursor-at"
+  changeProperty8 dpy wnd wM_CLASS sTRING propModeReplace $ castCharToCChar <$> windowClassName
 
   mapWindow dpy wnd
   placeWindowAt dpy wnd wndX wndY
