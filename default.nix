@@ -1,22 +1,25 @@
-let sources = import nix/sources.nix; in
-{ pkgs ? import sources.nixpkgs {}
-, src ? (import nix/clean-src.nix { inherit pkgs; }) ./. # A directory
+{ callPackage
+, haskellPackages
+, haskell
+
+# Build options
+, __src ? (callPackage nix/clean-src.nix {}) ./. # A directory
 , justStaticExecutable ? true
 }:
 let
   name = "place-cursor-at";
-  pkg = haskellPackages.callCabal2nix name src {};
+  pkg = extendedHaskellPackages.callCabal2nix name __src {};
 
-  haskellPackages = pkgs.haskellPackages.extend (self: super: {
+  extendedHaskellPackages = haskellPackages.extend (self: super: {
     ${name} = pkg;
   });
 
   justStaticExecutableFn =
     if justStaticExecutable
-    then pkgs.haskell.lib.justStaticExecutables
+    then haskell.lib.justStaticExecutables
     else x: x;
 in
 justStaticExecutableFn pkg // {
-  inherit src haskellPackages;
+  haskellPackages = extendedHaskellPackages;
   haskellPackage = pkg;
 }

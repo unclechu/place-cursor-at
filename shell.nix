@@ -2,11 +2,15 @@ let sources = import nix/sources.nix; in
 # Forwarded arguments
 args@
 { pkgs ? import sources.nixpkgs {}
-, src ? null
-, justStaticExecutable ? false
+
+# Forwarded build options
+, __src ? null
+, justStaticExecutable ? false # N.B. Default value is different here
+
+# Overridable local dependencies
+, nix-utils ? pkgs.callPackage sources.nix-utils {}
 
 # Local arguments
-, utils ? import sources.nix-utils { inherit pkgs; }
 , withCabal ? false
 , withStack ? false
 , withPackageRepl ? false # Adds package library modules into GHCi REPL
@@ -14,14 +18,14 @@ args@
 , buildExecutable ? true
 }:
 let
-  forwardedNames = [ "pkgs" "src" ];
+  forwardedNames = [ "__src" ];
   filterForwarded = pkgs.lib.filterAttrs (n: v: builtins.elem n forwardedNames);
   forwardedArgs = { inherit justStaticExecutable; } // filterForwarded args;
-  pkg = import ./. forwardedArgs;
+  pkg = pkgs.callPackage ./. forwardedArgs;
   hp = pkg.haskellPackages;
   name = pkg.haskellPackage.pname;
 
-  inherit (utils) wrapExecutable;
+  inherit (nix-utils) wrapExecutable;
   pkgReplGhc = hp.ghcWithPackages (p: [p.${name}]);
 
   # Produces ‘PACKAGE-NAME-ghc’ and ‘PACKAGE-NAME-ghci’ files.
