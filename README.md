@@ -3,6 +3,13 @@
 Utility for X11 that helps to move mouse cursor using only keyboard
 written in Haskell.
 
+You bind a hotkey (in your WM configuration or by using [xbindkeys]) to run
+`place-cursor-at` (say `Super+M`) and when you press it you see 9 windows on
+current screen with letters shown on them. When you press a letter on your
+keyboard that is associated with one of those windows your mouse cursor appear
+at the center of that window and the application closes. Thus you can quickly
+move your mouse cursor to one of 9 different spots by two-step combo.
+
 I made it for myself to use with
 [xmonad](https://github.com/unclechu/xmonadrc)
 and [i3](https://github.com/unclechu/i3rc).
@@ -175,3 +182,4 @@ place-cursor-at 1 lt
 [Nix Package Manager]: https://nixos.org/manual/nix/stable/#ch-about-nix
 [shell.nix]: shell.nix
 [Terminus font]: http://terminus-font.sourceforge.net/
+[xbindkeys]: https://linux.die.net/man/1/xbindkeys
