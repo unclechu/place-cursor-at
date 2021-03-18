@@ -1,3 +1,6 @@
+# Author: Viacheslav Lotsmanov
+# License: GNU/GPLv3 https://raw.githubusercontent.com/unclechu/place-cursor-at/master/LICENSE
+
 # This module is intended to be called with ‘nixpkgs.callPackage’
 { callPackage
 , haskellPackages

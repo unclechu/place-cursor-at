@@ -1,3 +1,7 @@
+# Author: Viacheslav Lotsmanov
+# License: GNU/GPLv3 https://raw.githubusercontent.com/unclechu/place-cursor-at/master/LICENSE
+
+# This module is intended to be called with ‘nixpkgs.callPackage’
 { lib, nix-gitignore }:
 let
   withoutDeadWeight = fileName: fileType: ! (

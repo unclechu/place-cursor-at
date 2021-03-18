@@ -2,6 +2,9 @@
 #! nix-shell -i runhaskell
 #! nix-shell -E "let ghc = n.haskellPackages.ghcWithPackages (p: [p.base-unicode-symbols p.X11]); d = n.mkShell { buildInputs = [ghc]; }; n = import (fetchTarball { url = \"https://github.com/NixOS/nixpkgs/archive/a3fa481cb683d619ab9e1a64877f3c0c5fd24f40.tar.gz\"; sha256 = \"0y5dzi3npv13vyacmb4q93j0cpg6gjgvylq4ckjjvcb6szdsizqi\"; }) {}; in d"
 
+-- Author: Viacheslav Lotsmanov
+-- License: GNU/GPLv3 https://raw.githubusercontent.com/unclechu/place-cursor-at/master/LICENSE
+
 {-# OPTIONS_GHC -Wall -fprint-potential-instances #-}
 {-# LANGUAGE UnicodeSyntax, BangPatterns, MultiWayIf, ViewPatterns, ScopedTypeVariables, GADTs #-}
 {-# LANGUAGE DerivingStrategies, GeneralizedNewtypeDeriving #-}

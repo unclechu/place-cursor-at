@@ -1,3 +1,6 @@
+# Author: Viacheslav Lotsmanov
+# License: GNU/GPLv3 https://raw.githubusercontent.com/unclechu/place-cursor-at/master/LICENSE
+
 let sources = import nix/sources.nix; in
 # Forwarded arguments
 args@
