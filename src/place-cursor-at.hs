@@ -20,9 +20,9 @@ import Text.Read (ReadPrec, Read (readPrec), lift, choice, readMaybe)
 
 import Control.Applicative ((<|>))
 import Control.Arrow ((***), (&&&))
-import Control.Concurrent (forkIO)
+import Control.Concurrent (forkFinally)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, readMVar)
-import Control.Exception (try)
+import Control.Exception (SomeException, try, throwIO)
 import Control.Monad (forever, forM_, foldM, when, void)
 
 import System.Environment (getArgs)
@@ -198,8 +198,12 @@ main = do
 
        Nothing → do
          let places' = places <&> \((_, keyCode), coords) → (keyCode, coords)
-         forM_ windows $ forkIO ∘ windowInstance (doneWithIt doneHandler) places'
-         waitBeforeItIsDone doneHandler
+         let done = doneWithIt doneHandler
+
+         forM_ windows $
+           windowInstance (done (pure ())) places' • (`forkFinally` done)
+
+         waitBeforeItIsDone doneHandler >>= either throwIO pure
 
 
 -- | Kill previous instance of *place-cursor-at*.
@@ -416,13 +420,13 @@ draw dpy wnd gc fontStruct text = go where
 
 
 data DoneApi = DoneApi
-   { doneWithIt         ∷ IO ()
-   , waitBeforeItIsDone ∷ IO ()
+   { doneWithIt         ∷ Either SomeException () -> IO ()
+   , waitBeforeItIsDone ∷ IO (Either SomeException ())
    }
 
 mkDoneHandler ∷ IO DoneApi
 mkDoneHandler = newEmptyMVar <&> \mvar → DoneApi
-  { doneWithIt         = putMVar mvar ()
+  { doneWithIt         = putMVar mvar
   , waitBeforeItIsDone = readMVar mvar
   }
 
