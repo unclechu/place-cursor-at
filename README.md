@@ -1,4 +1,4 @@
-![place-cursor-at](artwork/logo.svg)
+![place-cursor-at](artwork/logo/horizontal.svg)
 
 Utility for X11 that helps to move mouse cursor using only keyboard
 written in Haskell.
