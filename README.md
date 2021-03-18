@@ -172,14 +172,29 @@ place-cursor-at 1 lt
 
 ## Author
 
-[Viacheslav Lotsmanov](https://github.com/unclechu)
+[Viacheslav Lotsmanov]
 
-## License
+## Contributors
 
-[GNU/GPLv3](LICENSE)
+The [logo] is created by [psikoz] and
+some technical adjustments are made by [Viacheslav Lotsmanov].
+
+## Licenses
+
+1. **place-cursor-at**: [GNU/GPLv3](LICENSE)
+
+2. **[logo]**:
+   [Creative Commons — Attribution 4.0 International (CC BY 4.0)][CC BY 4.0].
 
 [The Haskell Tool Stack]: https://docs.haskellstack.org/en/stable/README/
 [Nix Package Manager]: https://nixos.org/manual/nix/stable/#ch-about-nix
-[shell.nix]: shell.nix
 [Terminus font]: http://terminus-font.sourceforge.net/
 [xbindkeys]: https://linux.die.net/man/1/xbindkeys
+
+[shell.nix]: shell.nix
+[logo]: artwork/logo
+
+[CC BY 4.0]: https://creativecommons.org/licenses/by/4.0/
+
+[Viacheslav Lotsmanov]: https://github.com/unclechu
+[psikoz]: https://github.com/psikoz
