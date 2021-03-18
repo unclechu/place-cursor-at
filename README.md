@@ -1,4 +1,4 @@
-<p align="left"><img src="logo/logotype_horizontal.png" alt="place-cursor-at" height="100px"></p>
+![place-cursor-at](artwork/logo.svg)
 
 Utility for X11 that helps to move mouse cursor using only keyboard
 written in Haskell.
@@ -14,7 +14,7 @@ I made it for myself to use with
 [xmonad](https://github.com/unclechu/xmonadrc)
 and [i3](https://github.com/unclechu/i3rc).
 
-![Screenshot](screenshot.png)
+![Screenshot](artwork/screenshot.png)
 
 ## Requirements
 
