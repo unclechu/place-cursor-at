@@ -1,6 +1,6 @@
 #! /usr/bin/env nix-shell
 #! nix-shell -i runhaskell
-#! nix-shell -E "let ghc = n.haskellPackages.ghcWithPackages (p: [p.base-unicode-symbols p.X11]); d = n.mkShell { buildInputs = [ghc]; }; n = import (fetchTarball { url = \"https://github.com/NixOS/nixpkgs/archive/db31e48c5c8d99dcaf4e5883a96181f6ac4ad6f6.tar.gz\"; sha256 = \"1j5j7vbnq2i5zyl8498xrf490jca488iw6hylna3lfwji6rlcaqr\"; }) {}; in d"
+#! nix-shell -E "let ghc = n.haskellPackages.ghcWithPackages (p: [p.base-unicode-symbols p.X11]); d = n.mkShell { buildInputs = [ghc]; }; n = import (fetchTarball { url = \"https://github.com/NixOS/nixpkgs/archive/a3fa481cb683d619ab9e1a64877f3c0c5fd24f40.tar.gz\"; sha256 = \"0y5dzi3npv13vyacmb4q93j0cpg6gjgvylq4ckjjvcb6szdsizqi\"; }) {}; in d"
 
 {-# OPTIONS_GHC -Wall -fprint-potential-instances #-}
 {-# LANGUAGE UnicodeSyntax, MultiWayIf, ViewPatterns, ScopedTypeVariables, GADTs #-}

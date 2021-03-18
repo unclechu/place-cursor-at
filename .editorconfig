@@ -7,7 +7,7 @@ end_of_line = lf
 insert_final_newline = true
 max_line_length = 80
 
-[*.{yaml,cabal,hs,md}]
+[*.{yaml,cabal,hs,md,nix}]
 indent_style = space
 indent_size = 2
 
