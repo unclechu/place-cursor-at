@@ -181,10 +181,19 @@ some technical adjustments are made by [Viacheslav Lotsmanov].
 
 ## Licenses
 
-1. **place-cursor-at**: [GNU/GPLv3](LICENSE)
+1. **place-cursor-at** — [GNU/GPLv3](LICENSE)
 
-2. **[logo]**:
-   [Creative Commons — Attribution 4.0 International (CC BY 4.0)][CC BY 4.0].
+2. The logo —
+   [Creative Commons — Attribution 4.0 International (CC BY 4.0)][CC BY 4.0]
+
+   These files in [artwork/logo][logo] directory in particular:
+
+   - [artwork/logo/horizontal.svg](artwork/logo/horizontal.svg)
+   - [artwork/logo/horizontal.png](artwork/logo/horizontal.png)
+   - [artwork/logo/vertical.svg](artwork/logo/vertical.svg)
+   - [artwork/logo/vertical.png](artwork/logo/vertical.png)
+   - [artwork/logo/icon.svg](artwork/logo/icon.svg)
+   - [artwork/logo/icon.png](artwork/logo/icon.png)
 
 [The Haskell Tool Stack]: https://docs.haskellstack.org/en/stable/README/
 [Nix Package Manager]: https://nixos.org/manual/nix/stable/#ch-about-nix
