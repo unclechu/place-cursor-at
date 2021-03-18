@@ -3,7 +3,7 @@
 #! nix-shell -E "let ghc = n.haskellPackages.ghcWithPackages (p: [p.base-unicode-symbols p.X11]); d = n.mkShell { buildInputs = [ghc]; }; n = import (fetchTarball { url = \"https://github.com/NixOS/nixpkgs/archive/a3fa481cb683d619ab9e1a64877f3c0c5fd24f40.tar.gz\"; sha256 = \"0y5dzi3npv13vyacmb4q93j0cpg6gjgvylq4ckjjvcb6szdsizqi\"; }) {}; in d"
 
 {-# OPTIONS_GHC -Wall -fprint-potential-instances #-}
-{-# LANGUAGE UnicodeSyntax, MultiWayIf, ViewPatterns, ScopedTypeVariables, GADTs #-}
+{-# LANGUAGE UnicodeSyntax, BangPatterns, MultiWayIf, ViewPatterns, ScopedTypeVariables, GADTs #-}
 {-# LANGUAGE DerivingStrategies, GeneralizedNewtypeDeriving #-}
 
 import Prelude.Unicode
@@ -22,10 +22,11 @@ import Control.Applicative ((<|>))
 import Control.Arrow ((***), (&&&))
 import Control.Concurrent (forkFinally)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, readMVar)
-import Control.Exception (SomeException, try, throwIO)
-import Control.Monad (forever, forM_, foldM, when, void)
+import Control.Exception (SomeException, try, catch, throwIO)
+import Control.Monad (forever, forM_, foldM, void)
 
 import System.Environment (getArgs)
+import System.IO (hPutStrLn, stderr)
 
 import Graphics.X11.Xlib
 
@@ -63,8 +64,14 @@ fontSize      = 32
 offsetPercent = 10
 
 
-fontQ ∷ String
-fontQ = "-*-terminus-bold-r-normal-*-" ⧺ show (fontSize ∷ ℤ) ⧺ "-*-*-*-*-*-*-*"
+preferredFontName ∷ String
+preferredFontName = "terminus"
+
+defaultFontName ∷ String
+defaultFontName = "*"
+
+fontQ ∷ String → String
+fontQ fontName = "-*-" ⧺ fontName ⧺ "-bold-r-normal-*-" ⧺ show (fontSize ∷ ℤ) ⧺ "-*-*-*-*-*-*-*"
 
 
 windowClassName ∷ String
@@ -139,11 +146,7 @@ main = do
     in
       (getArgs >>= foldM reducer emptyArgv) <&> (argvOnDisplay &&& argvToPosition)
 
-  xsi ← getScreenInfo dpy xsn
-
-  seq xsi $
-    when (isNothing justGoToPos') $
-      closeDisplay dpy
+  !xsi ← getScreenInfo dpy xsn
 
   let xX, xY, xW, xH ∷ ℚ
       relativeX, relativeY ∷ Pos → ℚ
@@ -200,8 +203,22 @@ main = do
          let places' = places <&> \((_, keyCode), coords) → (keyCode, coords)
          let done = doneWithIt doneHandler
 
+         resolvedFontName ← do
+           let query fontName = fontName <$ (loadQueryFont dpy (fontQ fontName) >>= freeFont dpy)
+           query preferredFontName `catch` \(_ ∷ SomeException) → do
+             hPutStrLn stderr $ unwords
+               [ "Failed to load", show preferredFontName, "font"
+               , "(" ⧺ show (fontQ preferredFontName) ⧺ ")."
+               , "Falling back to default font (" ⧺ show (fontQ defaultFontName) ⧺ ")."
+               , "This application is intended to be used with", show preferredFontName
+               , "font so you might want to install it into your system to get better experience."
+               ]
+             query defaultFontName
+
+         closeDisplay dpy
+
          forM_ windows $
-           windowInstance (done (pure ())) places' • (`forkFinally` done)
+           windowInstance (done (pure ())) resolvedFontName places' • (`forkFinally` done)
 
          waitBeforeItIsDone doneHandler >>= either throwIO pure
 
@@ -298,11 +315,12 @@ getScreenInfo dpy specificScreen = go where
 
 
 windowInstance ∷ IO ()
+               → String
                → [(KeyCode, (Position, Position))]
                → (String, (Position, Position))
                → IO ()
 
-windowInstance done places (text, (wndX, wndY)) = do
+windowInstance done fontName places (text, (wndX, wndY)) = do
 
   dpy ← openDisplay ""
 
@@ -313,7 +331,7 @@ windowInstance done places (text, (wndX, wndY)) = do
     blackPx = blackPixel        dpy screen
     whitePx = whitePixel        dpy screen
 
-  fontStruct ← loadQueryFont dpy fontQ
+  fontStruct ← loadQueryFont dpy (fontQ fontName)
   setFont dpy gc $ fontFromFontStruct fontStruct
   setForeground dpy gc whitePx
 
