@@ -1,18 +1,28 @@
 # place-cursor-at
 
-Utility for X11 that helps to move cursor using only keyboard
+Utility for X11 that helps to move mouse cursor using only keyboard
 written in Haskell.
 
 I made it for myself to use with
 [xmonad](https://github.com/unclechu/xmonadrc)
 and [i3](https://github.com/unclechu/i3rc).
 
-![Screenshot](./screenshot.png)
+![Screenshot](screenshot.png)
 
 ## Requirements
 
-- Either [Nix Package Manager] or [The Haskell Tool Stack]
-- `libX11` and `libXinerama` with development files
+Either one:
+
+1. [Nix Package Manager]
+
+   **WARNING!** You have to provide [Terminus font] in your system setup.
+   **FIXME** issue: https://github.com/unclechu/place-cursor-at/issues/1
+
+2. [The Haskell Tool Stack] and:
+
+   1. `libX11` development files
+   2. `libXinerama` development files
+   3. [Terminus font] available in your system setup
 
 ## How to use
 
@@ -20,33 +30,47 @@ and [i3](https://github.com/unclechu/i3rc).
 
 See [Nix Package Manager].
 
-Write a `shell.nix` like this one:
+You can run this application like this:
 
-```nix
-{ pkgs ? import <nixpkgs> {} }:
-let
-  place-cursor-at = import (
-    let c = "e8d624f056f2fe386f97c2f3828a08581e1fd909"; in fetchTarball {
-      url = "https://github.com/unclechu/place-cursor-at/archive/${c}.tar.gz";
-      sha256 = "0qviy1xmazg0299lgx6rsh540amls6rrm4p55iclah0pswqix1jn";
-    }
-  ) {};
-in
-  pkgs.mkShell { buildInputs = [ place-cursor-at ]; }
+``` sh
+nix-shell --run place-cursor-at
 ```
 
-Where `c` is a git commit hash, take latest from `master` branch,
-this may be and probably is outdated, just an example.
-You would also have to fix `sha256`, Nix will tell
-you it mismatches and show you the actual hash-sum.
+See also [shell.nix]’s arguments for available options.
+For instance if you want to enter a `nix-shell` with `cabal` available:
 
-Then run `nix-shell --run place-cursor-at`.
+``` sh
+nix-shell --arg withCabal true
+```
+
+#### NixOS
+
+You can add this application into your NixOS `configuration.nix` like this
+(mind that [Terminus font] is provided here too):
+
+``` nix
+{ pkgs, ... }:
+let
+  place-cursor-at-src = pkgs.fetchFromGitHub {
+    owner = "unclechu";
+    repo = "place-cursor-at";
+    rev = "ffffffffffffffffffffffffffffffffffffffff"; # Git commit hash
+    sha256 = "0000000000000000000000000000000000000000000000000000";
+  };
+
+  place-cursor-at = pkgs.callPackage place-cursor-at-src {};
+in
+{
+  fonts.fonts = [ pkgs.terminus_font ];
+  environment.systemPackages = [ place-cursor-at ];
+}
+```
 
 ### With Stack
 
 See [The Haskell Tool Stack].
 
-```bash
+``` sh
 stack build
 stack exec place-cursor-at
 ```
@@ -54,46 +78,47 @@ stack exec place-cursor-at
 You could install `place-cursor-at` binary to `~/.local/bin` directory
 (make sure you have this directory in your `PATH` environment variable):
 
-```bash
+``` sh
 stack install
 ```
 
 #### NixOS note
 
-Under NixOS if you for some reason decide to use Stack you would be forced to
-use `--system-ghc`. You may call each of the command from above with this flag
-of just define this alias before running anything else:
+If you need to work with Stack under NixOS for whatever reason you would have to
+use `--system-ghc` in order to make it work. You can manually add `--system-ghc`
+to each call of `stack` or define this alias for your convenience:
 
-```bash
+``` sh
 alias stack='stack --system-ghc'
 ```
 
 ## Using it as script
 
-You also could run it as a script
+You also can run this application as a script
 (`nix-shell` script, so you have to
 [install Nix Package Manager](https://nixos.org/nix/manual/#chap-installation)
 first):
 
-```bash
+``` sh
 src/place-cursor-at.hs
 ```
 
-But it is supposed to be used very often and to be very responsive,
-so it's better to precompile it to reduce startup time.
+But this application is intended to be used very often (to be run again and
+again many times) and to be very responsive, so it’s better to precompile it to
+reduce startup time.
 
 ## Xinerama note
 
 By default it appears and do its stuff on display where your mouse cursor is.
-But you can specify which display it should appear on:
+But you can specify which display where it should appear on:
 
-```bash
+``` sh
 place-cursor-at 1
 ```
 
 Or on third display:
 
-```bash
+``` sh
 place-cursor-at 3
 ```
 
@@ -102,25 +127,25 @@ place-cursor-at 3
 You can immediately jump to specific position of a screen without showing any
 GUI, like this:
 
-```bash
+``` sh
 place-cursor-at LT
 ```
 
-It's case-insensitive, this also would work:
+It’s case-insensitive, this also would work:
 
-```bash
+``` sh
 place-cursor-at lt
 ```
 
 And you also can specify a display you want to jump to:
 
-```bash
+``` sh
 place-cursor-at lt 1
 ```
 
-In any order of arguments:
+In any order of the arguments:
 
-```bash
+``` sh
 place-cursor-at 1 lt
 ```
 
@@ -144,7 +169,9 @@ place-cursor-at 1 lt
 
 ## License
 
-[GNU/GPLv3](./LICENSE)
+[GNU/GPLv3](LICENSE)
 
 [The Haskell Tool Stack]: https://docs.haskellstack.org/en/stable/README/
-[Nix Package Manager]: https://nixos.org/nix/manual/#ch-about-nix
+[Nix Package Manager]: https://nixos.org/manual/nix/stable/#ch-about-nix
+[shell.nix]: shell.nix
+[Terminus font]: http://terminus-font.sourceforge.net/
