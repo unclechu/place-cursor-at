@@ -22,14 +22,10 @@ Either one:
 
 1. [Nix Package Manager]
 
-   **WARNING!** You have to provide [Terminus font] in your system setup.
-   **FIXME** issue: https://github.com/unclechu/place-cursor-at/issues/1
-
 2. [The Haskell Tool Stack] and:
 
    1. `libX11` development files
    2. `libXinerama` development files
-   3. [Terminus font] available in your system setup
 
 ## How to use
 
@@ -52,8 +48,7 @@ nix-shell --arg withCabal true
 
 #### NixOS
 
-You can add this application into your NixOS `configuration.nix` like this
-(mind that [Terminus font] is provided here too):
+You can add this application into your NixOS `configuration.nix` like this:
 
 ``` nix
 { pkgs, ... }:
@@ -68,7 +63,6 @@ let
   place-cursor-at = pkgs.callPackage place-cursor-at-src {};
 in
 {
-  fonts.fonts = [ pkgs.terminus_font ];
   environment.systemPackages = [ place-cursor-at ];
 }
 ```
@@ -197,7 +191,6 @@ some technical adjustments are made by [Viacheslav Lotsmanov].
 
 [The Haskell Tool Stack]: https://docs.haskellstack.org/en/stable/README/
 [Nix Package Manager]: https://nixos.org/manual/nix/stable/#ch-about-nix
-[Terminus font]: http://terminus-font.sourceforge.net/
 [xbindkeys]: https://linux.die.net/man/1/xbindkeys
 
 [shell.nix]: shell.nix

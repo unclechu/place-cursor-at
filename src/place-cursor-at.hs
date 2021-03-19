@@ -7,16 +7,16 @@
 
 {-# OPTIONS_GHC -Wall -fprint-potential-instances #-}
 {-# LANGUAGE UnicodeSyntax, BangPatterns, MultiWayIf, ViewPatterns, ScopedTypeVariables, GADTs #-}
-{-# LANGUAGE DerivingStrategies, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase, DerivingStrategies, GeneralizedNewtypeDeriving #-}
 
 import Prelude.Unicode
 
+import Data.Bifunctor (first)
 import Data.Bits ((.|.))
 import Data.Bool (bool)
 import Data.Char (toUpper)
 import Data.Functor ((<&>))
 import Data.List (find)
-import Data.Maybe
 import Numeric.Natural
 import Text.ParserCombinators.ReadP (satisfy)
 import Text.Read (ReadPrec, Read (readPrec), lift, choice, readMaybe)
@@ -25,28 +25,29 @@ import Control.Applicative ((<|>))
 import Control.Arrow ((***), (&&&))
 import Control.Concurrent (forkFinally)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, readMVar)
-import Control.Exception (SomeException, try, catch, throwIO)
+import Control.Exception (SomeException, try, throwIO)
 import Control.Monad (forever, forM_, foldM, void)
 
 import System.Environment (getArgs)
-import System.IO (hPutStrLn, stderr)
 
 import Graphics.X11.Xlib
 
-import Graphics.X11.Xlib.Extras ( SizeHints (..)
-                                , pMinSizeBit
-                                , pMaxSizeBit
-                                , changeProperty8
-                                , propModeReplace
-                                , queryTree
-                                , getTextProperty
-                                , TextProperty (tp_value)
-                                , killClient
-                                )
+import Graphics.X11.Xlib.Extras
+  ( SizeHints (..)
+  , pMinSizeBit
+  , pMaxSizeBit
+  , changeProperty8
+  , propModeReplace
+  , queryTree
+  , getTextProperty
+  , TextProperty (tp_value)
+  , killClient
+  )
 
-import Graphics.X11.Xinerama ( xineramaQueryScreens
-                             , XineramaScreenInfo (..)
-                             )
+import Graphics.X11.Xinerama
+  ( xineramaQueryScreens
+  , XineramaScreenInfo (..)
+  )
 
 import Foreign.C.String (castCharToCChar, peekCString)
 import Foreign.ForeignPtr (ForeignPtr, mallocForeignPtr)
@@ -61,30 +62,21 @@ foreign import ccall unsafe "XlibExtras.h XSetWMSizeHints"
   xSetWMSizeHints ∷ Display → Window → Ptr SizeHints → Int → IO ()
 
 
-s, w, h, fontSize, offsetPercent ∷ Num a ⇒ a
+s, w, h, letterPaddingX, letterPaddingY, offsetPercent ∷ Num a ⇒ a
 s = 40; w = s; h = s
-fontSize      = 32
+letterPaddingX = 10; letterPaddingY = 10
 offsetPercent = 10
-
-
-preferredFontName ∷ String
-preferredFontName = "terminus"
-
-defaultFontName ∷ String
-defaultFontName = "*"
-
-fontQ ∷ String → String
-fontQ fontName = "-*-" ⧺ fontName ⧺ "-bold-r-normal-*-" ⧺ show (fontSize ∷ ℤ) ⧺ "-*-*-*-*-*-*-*"
 
 
 windowClassName ∷ String
 windowClassName = "place-cursor-at"
 
 
-data Pos = PosLT | PosCT | PosRT
-         | PosLC | PosCC | PosRC
-         | PosLB | PosCB | PosRB
-           deriving (Eq, Show)
+data Pos
+   = PosLT | PosCT | PosRT
+   | PosLC | PosCC | PosRC
+   | PosLB | PosCB | PosRB
+     deriving stock (Eq, Show, Enum, Bounded)
 
 instance Read Pos where
   readPrec = go where
@@ -98,11 +90,49 @@ instance Read Pos where
       ]
 
 
-positions ∷ [ (Pos, (String, KeyCode)) ]
-positions = [ (PosLT, ("Q", 24)), (PosCT, ("W", 25)), (PosRT, ("E", 26))
-            , (PosLC, ("A", 38)), (PosCC, ("S", 39)), (PosRC, ("D", 40))
-            , (PosLB, ("Z", 52)), (PosCB, ("X", 53)), (PosRB, ("C", 54))
-            ]
+data Letter
+   = Q | W | E
+   | A | S | D
+   | Z | X | C
+     deriving stock (Eq, Show)
+
+letterToKeyCode ∷ Letter → KeyCode
+letterToKeyCode = \case
+  Q → 24; W → 25; E → 26
+  A → 38; S → 39; D → 40
+  Z → 52; X → 53; C → 54
+
+positionToLetter ∷ Pos → Letter
+positionToLetter = \case
+  PosLT → Q; PosCT → W; PosRT → E
+  PosLC → A; PosCC → S; PosRC → D
+  PosLB → Z; PosCB → X; PosRB → C
+
+
+-- | Position relative to either X or Y axis
+data AbstractPos
+   = MinPos    -- ^ Left of Top
+   | MiddlePos -- ^ Center
+   | MaxPos    -- ^ Right or Bottom
+     deriving stock (Eq, Show)
+
+getAbstractPosX ∷ Pos → AbstractPos
+getAbstractPosX = \case
+  PosLT → MinPos;    PosLC → MinPos;    PosLB → MinPos
+  PosCT → MiddlePos; PosCC → MiddlePos; PosCB → MiddlePos
+  PosRT → MaxPos;    PosRC → MaxPos;    PosRB → MaxPos
+
+getAbstractPosY ∷ Pos → AbstractPos
+getAbstractPosY = \case
+  PosLT → MinPos;    PosCT → MinPos;    PosRT → MinPos
+  PosLC → MiddlePos; PosCC → MiddlePos; PosRC → MiddlePos
+  PosLB → MaxPos;    PosCB → MaxPos;    PosRB → MaxPos
+
+abstractPosTo ∷ Fractional a ⇒ a → AbstractPos → a
+abstractPosTo x = \case
+  MinPos    → x × offsetPercent ÷ 100
+  MiddlePos → x ÷ 2
+  MaxPos    → x × (100 - offsetPercent) ÷ 100
 
 
 -- | Command-line arguments
@@ -112,7 +142,7 @@ data Argv
    -- ^ Jump to specific display
    , argvToPosition ∷ Maybe Pos
    -- ^ Jump to specific position on screen (GUI wont be shown)
-   } deriving (Show, Eq)
+   } deriving stock (Show, Eq)
 
 emptyArgv ∷ Argv
 emptyArgv = Argv Nothing Nothing
@@ -129,8 +159,8 @@ instance Read SpecificScreenNumber where
   readPrec =
     (readPrec ∷ ReadPrec Natural) >>= \x →
       if x ≡ 0
-      then fail $ "Incorrect screen number " ⧺ show x ⧺ " (must start with 1)"
-      else pure $ pred $ SpecificScreenNumber x
+      then fail $ unwords ["Incorrect screen number", show x, " (must start with 1)"]
+      else pure ∘ pred ∘ SpecificScreenNumber $ x
 
 
 main ∷ IO ()
@@ -151,51 +181,42 @@ main = do
 
   !xsi ← getScreenInfo dpy xsn
 
-  let xX, xY, xW, xH ∷ ℚ
-      relativeX, relativeY ∷ Pos → ℚ
+  let
+    xX, xY, xW, xH ∷ Rational
+    relativeX, relativeY ∷ Pos → Rational
 
-      from f = fromIntegral $ f xsi
-      xX = from xsi_x_org
-      xY = from xsi_y_org
-      xW = from xsi_width
-      xH = from xsi_height
+    from f = fromIntegral $ f xsi
+    xX = from xsi_x_org
+    xY = from xsi_y_org
+    xW = from xsi_width
+    xH = from xsi_height
+    relativeX = getAbstractPosX • abstractPosTo xW
+    relativeY = getAbstractPosY • abstractPosTo xH
 
-      relativeX pos
-        | pos ∈ [PosLT, PosLC, PosLB] = xW ⋅ offsetPercent ÷ 100
-        | pos ∈ [PosCT, PosCC, PosCB] = xW ÷ 2
-        | pos ∈ [PosRT, PosRC, PosRB] = xW ⋅ (100 - offsetPercent) ÷ 100
-        | otherwise = error "Unexpected behavior"
+    toPosition ∷ Rational → Position
+    toPosition = fromInteger ∘ round
 
-      relativeY pos
-        | pos ∈ [PosLT, PosCT, PosRT] = xH ⋅ offsetPercent ÷ 100
-        | pos ∈ [PosLC, PosCC, PosRC] = xH ÷ 2
-        | pos ∈ [PosLB, PosCB, PosRB] = xH ⋅ (100 - offsetPercent) ÷ 100
-        | otherwise = error "Unexpected behavior"
+    windows ∷ [(Letter, (Position, Position))]
+    windows = [minBound..maxBound] <&> \pos →
+      let
+        x, y ∷ Rational
+        x = xX + relativeX pos - (w ÷ 2)
+        y = xY + relativeY pos - (h ÷ 2)
+      in
+        (positionToLetter pos, (toPosition x, toPosition y))
 
-      toPosition ∷ ℚ → Position
-      toPosition = read ∘ show ∘ (round ∷ ℚ → ℤ)
-
-      windows ∷ [(String, (Position, Position))]
-      windows = flip map positions $ \(pos, (text, _)) →
-
-        let x, y ∷ ℚ
-            x = xX + relativeX pos - (w ÷ 2)
-            y = xY + relativeY pos - (h ÷ 2)
-
-         in (text, (toPosition x, toPosition y))
-
-      places ∷ [((Pos, KeyCode), (Position, Position))]
-      places = flip map positions $ \(pos, (_, keyCode)) →
-
-        let x, y ∷ ℚ
-            x = xX + relativeX pos
-            y = xY + relativeY pos
-
-         in ((pos, keyCode), (toPosition x, toPosition y))
+    places ∷ [(Pos, (Position, Position))]
+    places = [minBound..maxBound] <&> \pos →
+      let
+        x, y ∷ Rational
+        x = xX + relativeX pos
+        y = xY + relativeY pos
+      in
+        (pos, (toPosition x, toPosition y))
 
   case justGoToPos' of
        Just pos →
-         case lookup pos $ places <&> \((pos', _), coords) → (pos', coords) of
+         case lookup pos places of
               Just (x, y) → do
                 placeCursorAt dpy rootWnd x y
                 closeDisplay dpy
@@ -203,26 +224,10 @@ main = do
               Nothing → fail $ "Unexpectedly fail to find a 'place' by " ⧺ show pos
 
        Nothing → do
-         let places' = places <&> \((_, keyCode), coords) → (keyCode, coords)
-         let done = doneWithIt doneHandler
-
-         resolvedFontName ← do
-           let query fontName = fontName <$ (loadQueryFont dpy (fontQ fontName) >>= freeFont dpy)
-           query preferredFontName `catch` \(_ ∷ SomeException) → do
-             hPutStrLn stderr $ unwords
-               [ "Failed to load", show preferredFontName, "font"
-               , "(" ⧺ show (fontQ preferredFontName) ⧺ ")."
-               , "Falling back to default font (" ⧺ show (fontQ defaultFontName) ⧺ ")."
-               , "This application is intended to be used with", show preferredFontName
-               , "font so you might want to install it into your system to get better experience."
-               ]
-             query defaultFontName
-
          closeDisplay dpy
-
-         forM_ windows $
-           windowInstance (done (pure ())) resolvedFontName places' • (`forkFinally` done)
-
+         let places' = places <&> first (letterToKeyCode ∘ positionToLetter)
+         let done = doneWithIt doneHandler
+         forM_ windows $ windowInstance (done (pure ())) places' • (`forkFinally` done)
          waitBeforeItIsDone doneHandler >>= either throwIO pure
 
 
@@ -259,9 +264,9 @@ killPreviousInstanceIfExists dpy = go where
   getAllWindowsList ∷ Window → IO [Window]
   getAllWindowsList wnd = queryTree dpy wnd <&> \(_, _, x) → x
 
-  isPlaceCursorAtWindow ∷ Window → IO 𝔹
+  isPlaceCursorAtWindow ∷ Window → IO Bool
   isPlaceCursorAtWindow wnd = x where
-    x = try matchByWindowClass <&> either (const False ∷ IOError → 𝔹) id
+    x = try matchByWindowClass <&> either (const False ∷ IOError → Bool) id
 
     matchByWindowClass =
       getTextProperty dpy wnd wM_CLASS
@@ -277,11 +282,11 @@ getScreenInfo dpy specificScreen = go where
     ⧺ "check that libXinerama dependency is installed "
     ⧺ "and Xinerama X11 extension is active!"
 
-  isSpecifiedScreen ∷ SpecificScreenNumber → XineramaScreenInfo → 𝔹
+  isSpecifiedScreen ∷ SpecificScreenNumber → XineramaScreenInfo → Bool
   isSpecifiedScreen (SpecificScreenNumber (toInteger • fromInteger → n)) =
     xsi_screen_number • succ • (≡ n)
 
-  isScreenUnderCursor ∷ (ℤ, ℤ) → XineramaScreenInfo → 𝔹
+  isScreenUnderCursor ∷ (Integer, Integer) → XineramaScreenInfo → Bool
   isScreenUnderCursor (mX, mY) screenInfo = x where
     f        = fromIntegral
     (x1, y1) = (f (xsi_x_org screenInfo),      f (xsi_y_org screenInfo))
@@ -293,7 +298,7 @@ getScreenInfo dpy specificScreen = go where
       xineramaQueryScreens dpy >>=
         maybe (fail xineramaFailureMsg) pure
 
-    (predicateFn ∷ XineramaScreenInfo → 𝔹, failureMsg ∷ String) ←
+    (predicateFn ∷ XineramaScreenInfo → Bool, failureMsg ∷ String) ←
       case specificScreen of
            Nothing → do
              mouseCoords ← mousePos dpy (defaultRootWindow dpy) <&> (fromIntegral *** fromIntegral)
@@ -317,13 +322,13 @@ getScreenInfo dpy specificScreen = go where
     maybe (fail failureMsg) pure (find predicateFn screens)
 
 
-windowInstance ∷ IO ()
-               → String
-               → [(KeyCode, (Position, Position))]
-               → (String, (Position, Position))
-               → IO ()
+windowInstance
+  ∷ IO ()
+  → [(KeyCode, (Position, Position))]
+  → (Letter, (Position, Position))
+  → IO ()
 
-windowInstance done fontName places (text, (wndX, wndY)) = do
+windowInstance done places (letter, (wndX, wndY)) = do
 
   dpy ← openDisplay ""
 
@@ -334,8 +339,7 @@ windowInstance done fontName places (text, (wndX, wndY)) = do
     blackPx = blackPixel        dpy screen
     whitePx = whitePixel        dpy screen
 
-  fontStruct ← loadQueryFont dpy (fontQ fontName)
-  setFont dpy gc $ fontFromFontStruct fontStruct
+  setLineAttributes dpy gc 3 0 0 0 -- Increase line thickness
   setForeground dpy gc whitePx
 
   let
@@ -347,34 +351,35 @@ windowInstance done fontName places (text, (wndX, wndY)) = do
   xSetWMNormalHints dpy wnd shPtr
   xSetWMSizeHints dpy wnd shPtr $ pMinSizeBit .|. pMaxSizeBit
 
-  storeName dpy wnd $ "Place Cursor At [" ⧺ text ⧺ "]"
+  storeName dpy wnd $ "Place Cursor At [" ⧺ show letter ⧺ "]"
   changeProperty8 dpy wnd wM_CLASS sTRING propModeReplace $ castCharToCChar <$> windowClassName
 
   mapWindow dpy wnd
   placeWindowAt dpy wnd wndX wndY
 
   selectInput dpy wnd $ keyPressMask .|. exposureMask
-  () <$ allocaXEvent (forever ∘ evLoop done dpy wnd gc fontStruct placeAt text places)
+  () <$ allocaXEvent (forever ∘ evLoop done dpy wnd gc placeAt letter places)
 
 
 allocSH ∷ IO (Ptr SizeHints)
 allocSH = go where
-  go = malloc <&> unsafeForeignPtrToPtr >>= \ptr → ptr <$ poke ptr sh
+  go = malloc >>= unsafeForeignPtrToPtr • \ptr → ptr <$ poke ptr sh
 
   malloc ∷ IO (ForeignPtr SizeHints)
   malloc = mallocForeignPtr
 
   sh ∷ SizeHints
-  sh = SizeHints { sh_min_size    = Just (w, h)
-                 , sh_max_size    = Just (w, h)
-                 , sh_resize_inc  = Nothing
-                 , sh_aspect      = Nothing
-                 , sh_base_size   = Nothing
-                 , sh_win_gravity = Nothing
-                 }
+  sh = SizeHints
+    { sh_min_size    = Just (w, h)
+    , sh_max_size    = Just (w, h)
+    , sh_resize_inc  = Nothing
+    , sh_aspect      = Nothing
+    , sh_base_size   = Nothing
+    , sh_win_gravity = Nothing
+    }
 
 
-mousePos ∷ Display → Window → IO (ℤ, ℤ)
+mousePos ∷ Display → Window → IO (Integer, Integer)
 mousePos dpy wnd = f <$> queryPointer dpy wnd
   where f (_, _, _, rootX, rootY, _, _, _) = (toInteger rootX, toInteger rootY)
 
@@ -386,62 +391,183 @@ placeCursorAt ∷ Display → Window → Position → Position → IO ()
 placeCursorAt dpy wnd x y = f where f = warpPointer dpy wnd wnd 0 0 0 0 x y
 
 
-evLoop ∷ IO ()
-       → Display → Window → GC → FontStruct
-       → (Position → Position → IO ())
-       → String
-       → [(KeyCode, (Position, Position))]
-       → XEventPtr
-       → IO ()
+evLoop
+  ∷ IO ()
+  → Display → Window → GC
+  → (Position → Position → IO ())
+  → Letter
+  → [(KeyCode, (Position, Position))]
+  → XEventPtr
+  → IO ()
 
-evLoop done dpy wnd gc fontStruct placeAt text places evPtr = do
+evLoop done dpy wnd gc placeAt letter places evPtr = do
   nextEvent dpy evPtr
   evType ← get_EventType evPtr
   let getKeyCode (_, _, _, _, _, _, _, _, keyCode, _) = keyCode
 
   if
-   | evType ≡ keyPress → get_KeyEvent evPtr <&> getKeyCode >>= handleKey done placeAt places text
-   | evType ≡ expose   → draw dpy wnd gc fontStruct text
+   | evType ≡ keyPress → get_KeyEvent evPtr >>= getKeyCode • handleKey done placeAt places letter
+   | evType ≡ expose   → draw dpy wnd gc letter
    | otherwise         → pure ()
 
 
-handleKey ∷ IO ()
-          → (Position → Position → IO ())
-          → [(KeyCode, (Position, Position))]
-          → String
-          → KeyCode
-          → IO ()
+handleKey
+  ∷ IO ()
+  → (Position → Position → IO ())
+  → [(KeyCode, (Position, Position))]
+  → Letter
+  → KeyCode
+  → IO ()
 
-handleKey done placeAt places text keyCode
+handleKey done placeAt places letter keyCode
   | keyCode ≡ 9  = done -- Escape
-  | keyCode ≡ 36 = handleKey done placeAt places (⊥) currentWindowKeyCode -- Enter
-  | isJust found = uncurry placeAt (fromJust found) >> done
-  | otherwise    = pure ()
+  | keyCode ≡ 36 = resolve ∘ letterToKeyCode $ letter -- Enter
+  | otherwise    = resolve keyCode
   where
-    found = snd <$> find ((≡ keyCode) ∘ fst) places
-    currentWindowKeyCode = fromJust $ snd ∘ snd <$> find ((≡ text) ∘ fst ∘ snd) positions
+    coordsByKeyCode keyCode' = snd <$> find ((≡ keyCode') ∘ fst) places
+    resolve (coordsByKeyCode → Just coords) = uncurry placeAt coords >> done
+    resolve _ = pure ()
 
 
-draw ∷ Display → Window → GC → FontStruct → String → IO ()
-draw dpy wnd gc fontStruct text = go where
-  go = drawString dpy wnd gc textXPos textYPos text
-  tw = textWidth fontStruct text
+data LinePointsRelativity = Absolute | Relative deriving stock (Eq, Show)
+data Line = Line LinePointsRelativity [Point] deriving stock (Eq, Show)
 
-  textXPos, textYPos ∷ Position
+draw ∷ Display → Window → GC → Letter → IO ()
+draw dpy wnd gc (letterToLines → linesToRender) =
+  forM_ linesToRender $ \(Line rel points) →
+    let
+      f n rescale = (round ∷ Rational → Position) ∘ rescale ∘ fromIntegral $ n
 
-  textXPos = x where
-    x = read $ show (round $ wndCenter - textCenter ∷ Int)
-    wndCenter = fromIntegral (w ∷ ℤ) ÷ 2 ∷ Float
-    textCenter = fromIntegral tw ÷ 2 ∷ Float
+      rescaledPoints = points <&> \(Point x y) →
+        Point
+          (f x (× ((pred w - letterPaddingX × 2) ÷ 100)))
+          (f y (× ((pred h - letterPaddingY × 2) ÷ 100)))
 
-  textYPos = x where
-    x = read $ show (round $ wndCenter + textCenter ∷ Int)
-    wndCenter = fromIntegral (h ∷ ℤ) ÷ 2 ∷ Float
-    textCenter = fontSize ÷ 4 ∷ Float
+      coordMode = case rel of
+        Absolute → coordModeOrigin
+        Relative → coordModePrevious
+
+      shiftPadding = case rel of
+        Absolute → fmap shift
+        Relative → \case (x : xs) → shift x : xs; [] → []
+        where shift (Point x y) = Point (x + letterPaddingX) (y + letterPaddingY)
+    in
+      drawLines dpy wnd gc (shiftPadding rescaledPoints) coordMode
+
+-- | Manually draw letters using simple lines.
+--
+-- Coordinates are like percents, in range form 0 to 100.
+letterToLines ∷ Letter → [Line]
+letterToLines = \case
+  Q → [ Line Absolute $ let spacer = 0 in
+          [ Point roundCorner 0
+          , Point (100 - roundCorner) 0
+          , Point 100 roundCorner
+          , Point 100 (100 - roundCorner - spacer)
+          , Point (100 - roundCorner) (100 - spacer)
+          , Point roundCorner (100 - spacer)
+          , Point 0 (100 - spacer - roundCorner)
+          , Point 0 roundCorner
+          , Point roundCorner 0
+          ]
+      , Line Relative
+          [ Point 100 120
+          , Point (-45) (-50)
+          ]
+      ]
+  W → [ Line Absolute
+          [ Point 0 0
+          , Point 0 100
+          , Point 50 60
+          , Point 100 100
+          , Point 100 0
+          ]
+      ]
+  E → [ Line Absolute
+          [ Point 110 0
+          , Point 0 0
+          , Point 0 50
+          , Point 110 50
+          ]
+      , Line Absolute
+          [ Point 0 50
+          , Point 0 100
+          , Point 110 100
+          ]
+      ]
+  A → [ Line Absolute
+          [ Point 0 100
+          , Point 0 roundCorner
+          , Point roundCorner 0
+          , Point (100 - roundCorner) 0
+          , Point 100 roundCorner
+          , Point 100 100
+          ]
+      , Line Absolute
+          [ Point 0 50
+          , Point 100 50
+          ]
+      ]
+  S → [ Line Absolute
+          [ Point 100 roundCorner
+          , Point (100 - roundCorner) 0
+          , Point roundCorner 0
+          , Point 0 roundCorner
+          , Point 0 (48 - roundCorner)
+          , Point roundCorner 48
+          , Point (100 - roundCorner) 48
+          , Point 100 (48 + roundCorner)
+          , Point 100 (100 - roundCorner)
+          , Point (100 - roundCorner) 100
+          , Point roundCorner 100
+          , Point 0 (100 - roundCorner)
+          ]
+      ]
+  D → [ Line Absolute $
+          let roundCorner' = (round ∷ Rational → Position) (fromIntegral roundCorner × (3/2)) in
+          [ Point 0 0
+          , Point 0 100
+          , Point (100 - roundCorner') 100
+          , Point 100 (100 - roundCorner')
+          , Point 100 roundCorner'
+          , Point (100 - roundCorner') 0
+          , Point 0 0
+          ]
+      ]
+  Z → [ Line Absolute
+          [ Point 0 0
+          , Point 90 0
+          , Point 5 100
+          , Point 105 100
+          ]
+      ]
+  X → [ Line Absolute
+          [ Point 0 0
+          , Point 103 103
+          ]
+      , Line Absolute
+          [ Point 0 100
+          , Point 103 (-3)
+          ]
+      ]
+  C → [ Line Absolute
+          [ Point 100 (roundCorner + 8)
+          , Point 100 roundCorner
+          , Point (100 - roundCorner) 0
+          , Point roundCorner 0
+          , Point 0 roundCorner
+          , Point 0 (100 - roundCorner)
+          , Point roundCorner 100
+          , Point (100 - roundCorner) 100
+          , Point 100 (100 - roundCorner)
+          , Point 100 (100 - (roundCorner + 8))
+          ]
+      ]
+  where roundCorner = 12
 
 
 data DoneApi = DoneApi
-   { doneWithIt         ∷ Either SomeException () -> IO ()
+   { doneWithIt         ∷ Either SomeException () → IO ()
    , waitBeforeItIsDone ∷ IO (Either SomeException ())
    }
 
@@ -456,5 +582,3 @@ mkDoneHandler = newEmptyMVar <&> \mvar → DoneApi
 (•) = flip (∘)
 infixl 9 •
 {-# INLINE (•) #-}
-
-type 𝔹 = Bool
