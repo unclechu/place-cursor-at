@@ -1,7 +1,12 @@
 ![place-cursor-at](artwork/logo/horizontal.svg)
 
-Utility for X11 that helps to move mouse cursor using only keyboard
-written in Haskell.
+A utility for X11 that moves the mouse cursor using the keyboard.
+Written in Haskell.
+
+This utility only gives you an ability to quickly move your mouse cursor to one
+of 9 common spots of the screen. It’s intended to reduce the use of the mouse,
+but not to replace it completely. It doesn’t provide you accurate aiming, only
+approximate.
 
 You bind a hotkey (in your WM configuration or by using [xbindkeys]) to run
 `place-cursor-at` (say `Super+M`) and when you press it you see 9 windows on
