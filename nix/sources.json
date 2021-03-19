@@ -11,6 +11,18 @@
         "url": "https://github.com/nmattia/niv/archive/af958e8057f345ee1aca714c1247ef3ba1c15f5e.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
+    "nix-utils": {
+        "branch": "master",
+        "description": "My own Nix utils",
+        "homepage": null,
+        "owner": "unclechu",
+        "repo": "nix-utils",
+        "rev": "74cb8ddb748d12a4f4cf8d0d1b370b7e59b3b53d",
+        "sha256": "0mwc2rxrxf95mwmggmhv1w26gcxxsds4703l7n1w6l2b2arqxc36",
+        "type": "tarball",
+        "url": "https://github.com/unclechu/nix-utils/archive/74cb8ddb748d12a4f4cf8d0d1b370b7e59b3b53d.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
     "nixpkgs": {
         "branch": "release-20.09",
         "description": "Nix Packages collection",
