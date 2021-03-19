@@ -10,7 +10,15 @@ keyboard that is associated with one of those windows your mouse cursor appear
 at the center of that window and the application closes. Thus you can quickly
 move your mouse cursor to one of 9 different spots by two-step combo.
 
-I made it for myself to use with
+Other key bindings:
+
+1. Press `Escape` to close the application
+   (when one of the *letter* windows is focused)
+
+2. Move focus to a *letter* window where you want your mouse cursor to be and
+   press `Enter` (this is the same as pressing that *letter* on your keyboard)
+
+I originally created this tool it for myself to use it with
 [xmonad](https://github.com/unclechu/xmonadrc)
 and [i3](https://github.com/unclechu/i3rc).
 
