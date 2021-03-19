@@ -471,14 +471,14 @@ letterToLines = \case
           , Point roundCorner 0
           ]
       , Line Relative
-          [ Point 100 120
-          , Point (-45) (-50)
+          [ Point 105 125
+          , Point (-50) (-50)
           ]
       ]
   W → [ Line Absolute
           [ Point 0 0
           , Point 0 100
-          , Point 50 60
+          , Point 50 55
           , Point 100 100
           , Point 100 0
           ]
@@ -486,8 +486,8 @@ letterToLines = \case
   E → [ Line Absolute
           [ Point 110 0
           , Point 0 0
-          , Point 0 50
-          , Point 110 50
+          , Point 0 45
+          , Point 110 45
           ]
       , Line Absolute
           [ Point 0 50
