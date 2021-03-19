@@ -128,8 +128,8 @@ getAbstractPosY = \case
   PosLC → MiddlePos; PosCC → MiddlePos; PosRC → MiddlePos
   PosLB → MaxPos;    PosCB → MaxPos;    PosRB → MaxPos
 
-abstractPosTo ∷ Fractional a ⇒ a → AbstractPos → a
-abstractPosTo x = \case
+abstractPosToCoordinate ∷ Fractional a ⇒ a → AbstractPos → a
+abstractPosToCoordinate x = \case
   MinPos    → x × offsetPercent ÷ 100
   MiddlePos → x ÷ 2
   MaxPos    → x × (100 - offsetPercent) ÷ 100
@@ -190,8 +190,8 @@ main = do
     xY = from xsi_y_org
     xW = from xsi_width
     xH = from xsi_height
-    relativeX = getAbstractPosX • abstractPosTo xW
-    relativeY = getAbstractPosY • abstractPosTo xH
+    relativeX = getAbstractPosX • abstractPosToCoordinate xW
+    relativeY = getAbstractPosY • abstractPosToCoordinate xH
 
     toPosition ∷ Rational → Position
     toPosition = fromInteger ∘ round
