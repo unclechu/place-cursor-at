@@ -4,10 +4,10 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 66d39f7b6b91273a09289c622d5c81b8bb6f010ee69d032997ed77412a1f96f5
+-- hash: 28a469787c7689160b683cbbdb65c1e82d866a1631cfe3a311b51a2ff5c70c49
 
 name:           place-cursor-at
-version:        1.0.0
+version:        1.0.1
 synopsis:       A utility for X11 that moves the mouse cursor using the keyboard
 category:       Utility, GUI, Desktop, Desktop Environment, X11
 homepage:       https://github.com/unclechu/place-cursor-at#readme
@@ -17,10 +17,11 @@ maintainer:     Viacheslav Lotsmanov <lotsmanov89@gmail.com>
 copyright:      Copyright © 2017–2021 Viacheslav Lotsmanov
 license:        GPL-3
 license-file:   LICENSE
-tested-with:    GHC ==8.10.4 || ==8.8.4 || ==8.6.4
+tested-with:    GHC == 8.10.4 || == 8.8.4 || == 8.6.4
 build-type:     Simple
 extra-source-files:
     README.md
+    CHANGELOG.md
 
 source-repository head
   type: git

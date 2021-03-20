@@ -1,6 +1,6 @@
 name:         place-cursor-at
 synopsis:     A utility for X11 that moves the mouse cursor using the keyboard
-version:      1.0.0
+version:      1.0.1
 license:      GPL-3
 license-file: LICENSE
 author:       Viacheslav Lotsmanov
@@ -9,9 +9,11 @@ maintainer:   Viacheslav Lotsmanov <lotsmanov89@gmail.com>
 category:     Utility, GUI, Desktop, Desktop Environment, X11
 github:       unclechu/place-cursor-at
 
-extra-source-files: README.md
+extra-source-files:
+  - README.md
+  - CHANGELOG.md
 
-tested-with: GHC ==8.10.4 || ==8.8.4 || ==8.6.4
+tested-with: GHC == 8.10.4 || == 8.8.4 || == 8.6.4
 
 dependencies:
   - base >= 4.12 && < 5
