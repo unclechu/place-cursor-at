@@ -148,13 +148,23 @@ emptyArgv ∷ Argv
 emptyArgv = Argv Nothing Nothing
 
 
+-- | Screen number that starts with 0.
+--
+-- N.B. In "Read" and "Show" instances it starts with 1.
+-- When parsed or printed it either decrements or increments.
 newtype SpecificScreenNumber
       = SpecificScreenNumber { fromSpecificScreenNumber ∷ Natural }
         deriving newtype (Eq, Enum)
 
+-- | Prints wrapped number as a string.
+--
+-- N.B. But printed number increments, it starts with 1 (instead of 0).
 instance Show SpecificScreenNumber where
   show = fromSpecificScreenNumber • succ • show
 
+-- | It reads screen number as plain number that starts with 1.
+--
+-- N.B. Wrapped value is decremented.
 instance Read SpecificScreenNumber where
   readPrec =
     (readPrec ∷ ReadPrec Natural) >>= \x →
@@ -284,7 +294,7 @@ getScreenInfo dpy specificScreen = go where
 
   isSpecifiedScreen ∷ SpecificScreenNumber → XineramaScreenInfo → Bool
   isSpecifiedScreen (SpecificScreenNumber (toInteger • fromInteger → n)) =
-    xsi_screen_number • succ • (≡ n)
+    xsi_screen_number • (≡ n)
 
   isScreenUnderCursor ∷ (Integer, Integer) → XineramaScreenInfo → Bool
   isScreenUnderCursor (mX, mY) screenInfo = x where
