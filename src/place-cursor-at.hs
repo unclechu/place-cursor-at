@@ -9,7 +9,7 @@
 {-# LANGUAGE UnicodeSyntax, BangPatterns, MultiWayIf, ViewPatterns, ScopedTypeVariables, GADTs #-}
 {-# LANGUAGE LambdaCase, DerivingStrategies, GeneralizedNewtypeDeriving #-}
 
-import Prelude.Unicode
+import Prelude.Unicode ((∘), (÷), (≡), (⧺), (∧), (≥))
 
 import Data.Bifunctor (first)
 import Data.Bits ((.|.))
@@ -582,3 +582,10 @@ mkDoneHandler = newEmptyMVar <&> \mvar → DoneApi
 (•) = flip (∘)
 infixl 9 •
 {-# INLINE (•) #-}
+
+-- This operator is provided by newer version of ‘base-unicode-symbols’.
+-- This adds support for older snaphots.
+(×) ∷ Num a ⇒ a → a → a
+(×) = (Prelude.*)
+infixl 7 ×
+{-# INLINE (×) #-}

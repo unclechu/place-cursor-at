@@ -1,5 +1,24 @@
-# also tested with lts-14.27 (ghc 8.6.5)
-resolver: lts-16.6 # ghc 8.8.3
+# Also tested with lts-13.19 (ghc 8.6.4).
+#
+# Test older one using Nix:
+#   nix-shell \
+#     --argstr nixpkgs-release 19.03 \
+#     --arg buildExecutable false \
+#     --arg withStack true \
+#     --arg withStackNixDependencies true \
+#     --run '[[ $(ghc --numeric-version) == 8.6.4 ]] && \
+#       stack build --system-ghc --no-nix --resolver=lts-13.19 && \
+#       stack exec --system-ghc --no-nix --resolver=lts-13.19 \
+#       place-cursor-at'
+#
+# Test current one using Nix:
+#   nix-shell \
+#     --arg buildExecutable false \
+#     --arg withStack true \
+#     --run 'stack build --system-ghc && \
+#       stack exec --system-ghc -- place-cursor-at'
+#
+resolver: lts-17.6 # ghc 8.10.4
 
 system-ghc: false
 packages: [.]
