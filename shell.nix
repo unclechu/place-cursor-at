@@ -1,6 +1,9 @@
 # Author: Viacheslav Lotsmanov
 # License: GNU/GPLv3 https://raw.githubusercontent.com/unclechu/place-cursor-at/master/LICENSE
 
+# In order to generate ‘cabal sdist’ bundle for Hackage just run:
+#   nix-shell --arg withCustomSdistScript true --run custom-sdist
+
 let sources = import nix/sources.nix; in
 args@
 { pkgs ?
@@ -20,6 +23,8 @@ args@
 
 # Overridable local dependencies
 , nix-utils ? pkgs.callPackage sources.nix-utils {}
+, custom-sdist-script ?
+    pkgs.callPackage nix/custom-sdist-script.nix { __nix-utils = nix-utils; }
 
 # Local arguments
 , withCabal ? false
@@ -28,6 +33,7 @@ args@
 , withStackNixDependencies ? false
 , withPackageRepl ? false # Adds package library modules into GHCi REPL
 , withHoogle ? true
+, withCustomSdistScript ? false
 , buildExecutable ? true
 }:
 let
@@ -83,6 +89,8 @@ let
       map attrPathToDerivation attrPaths;
 
   hpack = pkgs.haskell.lib.justStaticExecutables hp.hpack;
+  cabal = pkgs.haskell.lib.justStaticExecutables hp.cabal-install;
+  stack = pkgs.haskell.lib.justStaticExecutables hp.stack;
 in
 hp.shellFor {
   packages = p: [
@@ -92,10 +100,11 @@ hp.shellFor {
   inherit withHoogle;
 
   buildInputs =
-    (if withCabal then [ hp.cabal-install ] else []) ++
+    (if withCabal then [ cabal ] else []) ++
     (if withHpack then [ hpack ] else []) ++
-    (if withStack then [ hp.stack ] else []) ++
+    (if withStack then [ stack ] else []) ++
     (if withStackNixDependencies then stackNixDependencies else []) ++
-    (if buildExecutable then [ hp.${name} ] else []) ++
-    (if withPackageRepl then pkgRepl else []);
+    (if withPackageRepl then pkgRepl else []) ++
+    (if withCustomSdistScript then [ custom-sdist-script ] else []) ++
+    (if buildExecutable then [ hp.${name} ] else []);
 }
