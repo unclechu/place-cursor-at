@@ -17,7 +17,7 @@ let
   # Shortcuts for executables that are already escaped for Bash
   c = builtins.mapAttrs (n: v: esc v) executables;
 
-  assetsCommit = "be365c601ad94a108967701c70042b994d7dd3f3";
+  assetsCommit = "b636cb9651c6ededbbda80489c79ff4a68653d96";
 
   staticAssetUrl = filePath:
     "https://raw.githubusercontent.com/unclechu/place-cursor-at/" +
@@ -37,10 +37,21 @@ let
       }
       [ "cp" "mv" "mktemp" "basename" ];
 in
-
-# Script that prepares ‘README.md’ file for being published on Hackage.
-# It replaces relative links to some files in the repo to links to GitHub static
-# content links relative to specific commit (so that content stays the same).
+#
+# This script makes some preparations for publishing on Hackage and then calls
+# ‘cabal sdist’.
+#
+# Those preparations include:
+#
+#   1. Replace relative links to some files in ‘README.md’ with links to static
+#      content on GitHub (or to normal GitHub pages for some cases). Those files
+#      aren’t packaged into ‘sdist’ bundle so the links would be just broken
+#      otherwise. New links will be attached to a specific commit so the content
+#      stays the same.
+#
+#   2. Replace Markdown table in ‘README.md’ with just ASCII table wrapped into
+#      a code block
+#
 writeCheckedExecutable "custom-sdist" ''
   ${
     builtins.concatStringsSep "\n"
