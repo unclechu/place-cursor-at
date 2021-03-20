@@ -13,8 +13,8 @@ import Prelude.Unicode ((∘), (÷), (≡), (⧺), (∧), (≥))
 
 import Data.Bifunctor (first)
 import Data.Bits ((.|.))
-import Data.Bool (bool)
 import Data.Char (toUpper)
+import Data.Function (fix)
 import Data.Functor ((<&>))
 import Data.List (find)
 import Numeric.Natural
@@ -241,38 +241,23 @@ main = do
          waitBeforeItIsDone doneHandler >>= either throwIO pure
 
 
--- | Kill previous instance of *place-cursor-at*.
---
--- FIXME In some cases it fails the killer with this exception in the log:
---
--- @
--- X Error of failed request:  BadValue (integer parameter out of range for operation)
---   Major opcode of failed request:  113 (X_KillClient)
---   Value in failed request:  0x6000002
---   Serial number of failed request:  259
---   Current serial number in output stream:  260
--- @
---
--- I have no idea what the heck is this. I tried many ways to fix this with no success.
+-- | Kill previous instance of *place-cursor-at*
 killPreviousInstanceIfExists ∷ Display → IO ()
 killPreviousInstanceIfExists dpy = go where
-  go = traverseChildWindows (defaultRootWindow dpy)
-  kill = killClient dpy
+  go = findPreyToKill (defaultRootWindow dpy) >>= mapM_ (killClient dpy)
 
-  traverseChildWindows ∷ Window → IO ()
-  traverseChildWindows wnd = killEmRecursively where
-    killEmRecursively =
-      getAllWindowsList wnd
-      >>= foldM reducer mempty
-      >>= (mapM_ kill *** mapM_ traverseChildWindows) • uncurry (>>)
+  findPreyToKill ∷ Window → IO [Window]
+  findPreyToKill =
+    ($ []) $ fix $ \again acc !wnd →
+      isPlaceCursorAtWindow wnd >>= \case
+        False → foldM again acc =<< getChildWindows wnd
+        True → slurpAllChildren acc wnd
+    where
+      slurpAllChildren acc !wnd =
+        foldM slurpAllChildren (wnd : acc) =<< getChildWindows wnd
 
-    reducer ∷ acc ~ ([Window], [Window]) ⇒ acc → Window → IO acc
-    reducer acc x = f where
-      f = isPlaceCursorAtWindow x <&> \is → (x `appendIf` is *** x `appendIf` not is) acc
-      appendIf wndToAppend = bool id (⧺ [wndToAppend])
-
-  getAllWindowsList ∷ Window → IO [Window]
-  getAllWindowsList wnd = queryTree dpy wnd <&> \(_, _, x) → x
+  getChildWindows ∷ Window → IO [Window]
+  getChildWindows wnd = queryTree dpy wnd <&> \(_, _, x) → x
 
   isPlaceCursorAtWindow ∷ Window → IO Bool
   isPlaceCursorAtWindow wnd = x where
