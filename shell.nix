@@ -23,6 +23,7 @@ args@
 
 # Local arguments
 , withCabal ? false
+, withHpack ? false
 , withStack ? false
 , withStackNixDependencies ? false
 , withPackageRepl ? false # Adds package library modules into GHCi REPL
@@ -80,6 +81,8 @@ let
       assert builtins.length attrPaths > 0;
       assert builtins.all builtins.isString attrPaths;
       map attrPathToDerivation attrPaths;
+
+  hpack = pkgs.haskell.lib.justStaticExecutables hp.hpack;
 in
 hp.shellFor {
   packages = p: [
@@ -90,6 +93,7 @@ hp.shellFor {
 
   buildInputs =
     (if withCabal then [ hp.cabal-install ] else []) ++
+    (if withHpack then [ hpack ] else []) ++
     (if withStack then [ hp.stack ] else []) ++
     (if withStackNixDependencies then stackNixDependencies else []) ++
     (if buildExecutable then [ hp.${name} ] else []) ++
