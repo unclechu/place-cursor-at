@@ -496,16 +496,16 @@ letterToLines = \case
           ]
       ]
   A → [ Line Absolute
-          [ Point 0 100
+          [ Point 0 110
           , Point 0 roundCorner
           , Point roundCorner 0
           , Point (100 - roundCorner) 0
           , Point 100 roundCorner
-          , Point 100 100
+          , Point 100 110
           ]
       , Line Absolute
-          [ Point 0 50
-          , Point 100 50
+          [ Point 0 60
+          , Point 100 60
           ]
       ]
   S → [ Line Absolute
