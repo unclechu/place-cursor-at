@@ -287,10 +287,11 @@ killPreviousInstanceIfExists dpy = go where
 -- | Get info about screen either under cursor or specified by an argument.
 getScreenInfo ∷ Display → Maybe SpecificScreenNumber → IO XineramaScreenInfo
 getScreenInfo dpy specificScreen = go where
-  xineramaFailureMsg
-    = "Could not obtain Xinerama screens information, "
-    ⧺ "check that libXinerama dependency is installed "
-    ⧺ "and Xinerama X11 extension is active!"
+  xineramaFailureMsg = unwords
+    [ "Could not obtain Xinerama screens information,"
+    , "check that libXinerama dependency is installed"
+    , "and Xinerama X11 extension is active!"
+    ]
 
   isSpecifiedScreen ∷ SpecificScreenNumber → XineramaScreenInfo → Bool
   isSpecifiedScreen (SpecificScreenNumber (toInteger • fromInteger → n)) =
@@ -314,18 +315,21 @@ getScreenInfo dpy specificScreen = go where
              mouseCoords ← mousePos dpy (defaultRootWindow dpy) <&> (fromIntegral *** fromIntegral)
 
              let
-               failureMsg
-                 = "Could not find a screen which is under cursor, something went wrong "
-                 ⧺ "(mouse position: " ⧺ show mouseCoords ⧺ ", screens: " ⧺ show screens ⧺ ")"
+               failureMsg = unwords
+                 [ "Could not find a screen which is under cursor, something went wrong"
+                 , "(mouse position:", show mouseCoords ⧺ ", screens:", show screens ⧺ ")"
+                 ]
 
              pure (isScreenUnderCursor mouseCoords, failureMsg)
 
            Just screenNum →
              let
-               failureMsg
-                 = "Could not find screen by number " ⧺ show (succ screenNum) ⧺ ", "
-                 ⧺ "specified screen number must be out of range "
-                 ⧺ "(screens: " ⧺ show screens ⧺ ")"
+               failureMsg = unwords
+                 [ "Could not find screen number", show screenNum
+                 , "(by Xinerama screen number", show (fromSpecificScreenNumber screenNum) ⧺ "),"
+                 , "specified screen number is probably out of range"
+                 , "(screens:", show screens ⧺ ")"
+                 ]
              in
                pure (isSpecifiedScreen screenNum, failureMsg)
 
