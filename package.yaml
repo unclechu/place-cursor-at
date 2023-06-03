@@ -4,7 +4,7 @@ version:      1.0.1
 license:      GPL-3
 license-file: LICENSE
 author:       Viacheslav Lotsmanov
-copyright:    Copyright © 2017–2021 Viacheslav Lotsmanov
+copyright:    Copyright © 2017–2023 Viacheslav Lotsmanov
 maintainer:   Viacheslav Lotsmanov <lotsmanov89@gmail.com>
 category:     Utility, GUI, Desktop, Desktop Environment, X11
 github:       unclechu/place-cursor-at

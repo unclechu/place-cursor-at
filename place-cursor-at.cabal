@@ -14,7 +14,7 @@ homepage:       https://github.com/unclechu/place-cursor-at#readme
 bug-reports:    https://github.com/unclechu/place-cursor-at/issues
 author:         Viacheslav Lotsmanov
 maintainer:     Viacheslav Lotsmanov <lotsmanov89@gmail.com>
-copyright:      Copyright © 2017–2021 Viacheslav Lotsmanov
+copyright:      Copyright © 2017–2023 Viacheslav Lotsmanov
 license:        GPL-3
 license-file:   LICENSE
 tested-with:    GHC == 8.10.4 || == 8.8.4 || == 8.6.4
