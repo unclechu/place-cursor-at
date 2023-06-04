@@ -8,11 +8,11 @@ let sources = import nix/sources.nix; in
 args@
 { pkgs ?
     import sources."nixpkgs${
-      if nixpkgs-release == "20.09" then "" else "-${nixpkgs-release}"
+      if nixpkgs-release == "23.05" then "" else "-${nixpkgs-release}"
     }" {}
 
-# Tested with lower 19.03 and upper 20.09 pins.
-, nixpkgs-release ? "20.09" # One of: '20.09', '20.03', '19.09', '19.03'
+# Tested with lower 19.03 and upper 23.05 pins.
+, nixpkgs-release ? "23.05" # One of: '23.05', '20.09', '20.03', '19.09', '19.03'
 
 # It’s not provided in 19.03 for instance
 , yq-go ? (import sources.nixpkgs { inherit (pkgs) config; }).yq-go
