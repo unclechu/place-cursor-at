@@ -18,7 +18,7 @@
 #     --run 'stack build --system-ghc && \
 #       stack exec --system-ghc -- place-cursor-at'
 #
-resolver: lts-17.6 # ghc 8.10.4
+resolver: lts-20.23 # ghc 9.2.7
 
 system-ghc: false
 packages: [.]
