@@ -1,1 +1,14 @@
+# Cabal/package configuration
+watch_file place-cursor-at.cabal
+
+# Stack stuff
+watch_file package.yaml
+watch_file stack.yaml
+watch_file stack.yaml.lock
+
+# Nix
+watch_file default.nix
+watch_file shell.nix
+for file in nix/*.{nix,json}; do watch_file -- "$file"; done
+
 use nix --arg buildExecutable false
