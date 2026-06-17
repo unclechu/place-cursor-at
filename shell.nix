@@ -4,15 +4,21 @@
 # In order to generate ‘cabal sdist’ bundle for Hackage just run:
 #   nix-shell --arg withCustomSdistScript true --run custom-sdist
 
-let sources = import nix/sources.nix; in
+let
+  sources = import nix/sources.nix;
+  currentNixpkgsRelease = "26.05";
+in
+
 args@
 { pkgs ?
     import sources."nixpkgs${
-      if nixpkgs-release == "23.05" then "" else "-${nixpkgs-release}"
+      if nixpkgs-release == currentNixpkgsRelease then "" else "-${nixpkgs-release}"
     }" {}
 
-# Tested with lower 19.03 and upper 23.05 pins.
-, nixpkgs-release ? "23.05" # One of: '23.05', '20.09', '20.03', '19.09', '19.03'
+# Tested with lower 19.03 and upper 26.05 pins.
+# One of: '26.05', '23.05', '20.09', '20.03', '19.09', '19.03'
+# This field only matters if you don’t override `pkgs` argument.
+, nixpkgs-release ? currentNixpkgsRelease
 
 # It’s not provided in 19.03 for instance
 , yq-go ? (import sources.nixpkgs { inherit (pkgs) config; }).yq-go
@@ -92,6 +98,7 @@ let
   cabal = pkgs.haskell.lib.justStaticExecutables hp.cabal-install;
   stack = pkgs.haskell.lib.justStaticExecutables hp.stack;
 in
+
 hp.shellFor {
   packages = p: [
     p.${name}
