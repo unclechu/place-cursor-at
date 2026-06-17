@@ -33,7 +33,8 @@ args@
     pkgs.callPackage nix/custom-sdist-script.nix { __nix-utils = nix-utils; }
 
 # Local arguments
-, withCabal ? false
+, withHaskellLanguageServer ? true
+, withCabal ? true
 , withHpack ? false
 , withStack ? false
 , withStackNixDependencies ? false
@@ -42,9 +43,13 @@ args@
 , withCustomSdistScript ? false
 , buildExecutable ? true
 }:
+
+assert withHaskellLanguageServer -> withCabal;
+
 let
+  inherit (pkgs) lib;
   forwardedNames = [ "__src" ];
-  filterForwarded = pkgs.lib.filterAttrs (n: v: builtins.elem n forwardedNames);
+  filterForwarded = lib.filterAttrs (n: v: builtins.elem n forwardedNames);
   forwardedArgs = { inherit justStaticExecutable; } // filterForwarded args;
   pkg = pkgs.callPackage ./. forwardedArgs;
   hp = pkg.haskellPackages;
@@ -52,6 +57,15 @@ let
 
   inherit (nix-utils) esc wrapExecutable;
   pkgReplGhc = hp.ghcWithPackages (p: [p.${name}]);
+
+  # LSP for Haskell
+  hls = (pkgs.haskell-language-server.override {
+    haskellPackages = hp;
+
+    supportedGhcVersions = [
+      (builtins.replaceStrings ["."] [""] pkgReplGhc.version)
+    ];
+  });
 
   # Produces ‘PACKAGE-NAME-ghc’ and ‘PACKAGE-NAME-ghci’ files.
   # ‘shellFor’ overrides ‘ghc’ and ‘ghci’ executables.
@@ -85,7 +99,7 @@ let
       '';
 
       attrPathToDerivation = x:
-        pkgs.lib.attrsets.getAttrFromPath (pkgs.lib.splitString "." x) pkgs;
+        lib.attrsets.getAttrFromPath (lib.splitString "." x) pkgs;
 
       attrPaths = builtins.fromJSON (builtins.readFile nixModule);
     in
@@ -107,6 +121,7 @@ hp.shellFor {
   inherit withHoogle;
 
   buildInputs =
+    (if withHaskellLanguageServer then [ hls ] else []) ++
     (if withCabal then [ cabal ] else []) ++
     (if withHpack then [ hpack ] else []) ++
     (if withStack then [ stack ] else []) ++
