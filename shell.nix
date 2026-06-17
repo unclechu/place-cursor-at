@@ -121,12 +121,12 @@ hp.shellFor {
   inherit withHoogle;
 
   buildInputs =
-    (if withHaskellLanguageServer then [ hls ] else []) ++
-    (if withCabal then [ cabal ] else []) ++
-    (if withHpack then [ hpack ] else []) ++
-    (if withStack then [ stack ] else []) ++
-    (if withStackNixDependencies then stackNixDependencies else []) ++
-    (if withPackageRepl then pkgRepl else []) ++
-    (if withCustomSdistScript then [ custom-sdist-script ] else []) ++
-    (if buildExecutable then [ hp.${name} ] else []);
+    lib.optional withHaskellLanguageServer hls ++
+    lib.optional withCabal cabal ++
+    lib.optional withHpack hpack ++
+    lib.optional withStack stack ++
+    lib.optionals withStackNixDependencies stackNixDependencies ++
+    lib.optionals withPackageRepl pkgRepl ++
+    lib.optional withCustomSdistScript custom-sdist-script ++
+    lib.optional buildExecutable hp.${name};
 }
