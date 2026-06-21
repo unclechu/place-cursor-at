@@ -6,8 +6,7 @@
 -- License: GNU/GPLv3 https://raw.githubusercontent.com/unclechu/place-cursor-at/master/LICENSE
 
 {-# OPTIONS_GHC -Wall -fprint-potential-instances #-}
-{-# LANGUAGE UnicodeSyntax, BangPatterns, MultiWayIf, ViewPatterns, ScopedTypeVariables, GADTs #-}
-{-# LANGUAGE LambdaCase, DerivingStrategies, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE GHC2024, UnicodeSyntax, MultiWayIf, ViewPatterns #-}
 
 import Prelude.Unicode ((∘), (÷), (≡), (⧺), (∧), (≥))
 
