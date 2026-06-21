@@ -17,38 +17,19 @@ import Data.Char (toUpper)
 import Data.Function (fix)
 import Data.Functor ((<&>))
 import Data.List (find)
-import Numeric.Natural
+import qualified Numeric.Natural as N
 import Text.ParserCombinators.ReadP (satisfy)
 import Text.Read (ReadPrec, Read (readPrec), lift, choice, readMaybe)
-
 import Control.Applicative ((<|>))
 import Control.Arrow ((***), (&&&))
 import Control.Concurrent (forkFinally)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, readMVar)
 import Control.Exception (SomeException, try, throwIO)
 import Control.Monad (forever, forM_, foldM, void)
-
 import System.Environment (getArgs)
-
-import Graphics.X11.Xlib
-
-import Graphics.X11.Xlib.Extras
-  ( SizeHints (..)
-  , pMinSizeBit
-  , pMaxSizeBit
-  , changeProperty8
-  , propModeReplace
-  , queryTree
-  , getTextProperty
-  , TextProperty (tp_value)
-  , killClient
-  )
-
-import Graphics.X11.Xinerama
-  ( xineramaQueryScreens
-  , XineramaScreenInfo (..)
-  )
-
+import qualified Graphics.X11.Xlib as Xlib
+import qualified Graphics.X11.Xlib.Extras as XlibExtras
+import qualified Graphics.X11.Xinerama as Xinerama
 import Foreign.C.String (castCharToCChar, peekCString)
 import Foreign.ForeignPtr (ForeignPtr, mallocForeignPtr)
 import Foreign.ForeignPtr.Unsafe (unsafeForeignPtrToPtr)
@@ -56,10 +37,10 @@ import Foreign.Ptr (Ptr)
 import Foreign.Storable (Storable (poke))
 
 foreign import ccall unsafe "XlibExtras.h XSetWMNormalHints"
-  xSetWMNormalHints ∷ Display → Window → Ptr SizeHints → IO ()
+  xSetWMNormalHints ∷ Xlib.Display → Xlib.Window → Ptr XlibExtras.SizeHints → IO ()
 
 foreign import ccall unsafe "XlibExtras.h XSetWMSizeHints"
-  xSetWMSizeHints ∷ Display → Window → Ptr SizeHints → Int → IO ()
+  xSetWMSizeHints ∷ Xlib.Display → Xlib.Window → Ptr XlibExtras.SizeHints → Int → IO ()
 
 
 s, w, h, letterPaddingX, letterPaddingY, offsetPercent ∷ Num a ⇒ a
@@ -96,7 +77,7 @@ data Letter
    | Z | X | C
      deriving stock (Eq, Show)
 
-letterToKeyCode ∷ Letter → KeyCode
+letterToKeyCode ∷ Letter → Xlib.KeyCode
 letterToKeyCode = \case
   Q → 24; W → 25; E → 26
   A → 38; S → 39; D → 40
@@ -153,7 +134,7 @@ emptyArgv = Argv Nothing Nothing
 -- N.B. In "Read" and "Show" instances it starts with 1.
 -- When parsed or printed it either decrements or increments.
 newtype SpecificScreenNumber
-      = SpecificScreenNumber { fromSpecificScreenNumber ∷ Natural }
+      = SpecificScreenNumber { fromSpecificScreenNumber ∷ N.Natural }
         deriving newtype (Eq, Enum)
 
 -- | Prints wrapped number as a string.
@@ -167,7 +148,7 @@ instance Show SpecificScreenNumber where
 -- N.B. Wrapped value is decremented.
 instance Read SpecificScreenNumber where
   readPrec =
-    (readPrec ∷ ReadPrec Natural) >>= \x →
+    (readPrec ∷ ReadPrec N.Natural) >>= \x →
       if x ≡ 0
       then fail $ unwords ["Incorrect screen number", show x, " (must start with 1)"]
       else pure ∘ pred ∘ SpecificScreenNumber $ x
@@ -176,7 +157,7 @@ instance Read SpecificScreenNumber where
 main ∷ IO ()
 main = do
   doneHandler ← mkDoneHandler
-  (dpy, rootWnd) ← (id &&& defaultRootWindow) <$> openDisplay ""
+  (dpy, rootWnd) ← (id &&& Xlib.defaultRootWindow) <$> Xlib.openDisplay ""
   killPreviousInstanceIfExists dpy
 
   (xsn, justGoToPos') ←
@@ -196,17 +177,17 @@ main = do
     relativeX, relativeY ∷ Pos → Rational
 
     from f = fromIntegral $ f xsi
-    xX = from xsi_x_org
-    xY = from xsi_y_org
-    xW = from xsi_width
-    xH = from xsi_height
+    xX = from Xinerama.xsi_x_org
+    xY = from Xinerama.xsi_y_org
+    xW = from Xinerama.xsi_width
+    xH = from Xinerama.xsi_height
     relativeX = getAbstractPosX • abstractPosToCoordinate xW
     relativeY = getAbstractPosY • abstractPosToCoordinate xH
 
-    toPosition ∷ Rational → Position
+    toPosition ∷ Rational → Xlib.Position
     toPosition = fromInteger ∘ round
 
-    windows ∷ [(Letter, (Position, Position))]
+    windows ∷ [(Letter, (Xlib.Position, Xlib.Position))]
     windows = [minBound..maxBound] <&> \pos →
       let
         x, y ∷ Rational
@@ -215,7 +196,7 @@ main = do
       in
         (positionToLetter pos, (toPosition x, toPosition y))
 
-    places ∷ [(Pos, (Position, Position))]
+    places ∷ [(Pos, (Xlib.Position, Xlib.Position))]
     places = [minBound..maxBound] <&> \pos →
       let
         x, y ∷ Rational
@@ -229,12 +210,12 @@ main = do
          case lookup pos places of
               Just (x, y) → do
                 placeCursorAt dpy rootWnd x y
-                closeDisplay dpy
+                Xlib.closeDisplay dpy
 
               Nothing → fail $ "Unexpectedly fail to find a 'place' by " ⧺ show pos
 
        Nothing → do
-         closeDisplay dpy
+         Xlib.closeDisplay dpy
          let places' = places <&> first (letterToKeyCode ∘ positionToLetter)
          let done = doneWithIt doneHandler
          forM_ windows $ windowInstance (done (pure ())) places' • (`forkFinally` done)
@@ -242,11 +223,11 @@ main = do
 
 
 -- | Kill previous instance of *place-cursor-at*
-killPreviousInstanceIfExists ∷ Display → IO ()
+killPreviousInstanceIfExists ∷ Xlib.Display → IO ()
 killPreviousInstanceIfExists dpy = go where
-  go = findPreyToKill (defaultRootWindow dpy) >>= mapM_ (killClient dpy)
+  go = findPreyToKill (Xlib.defaultRootWindow dpy) >>= mapM_ (XlibExtras.killClient dpy)
 
-  findPreyToKill ∷ Window → IO [Window]
+  findPreyToKill ∷ Xlib.Window → IO [Xlib.Window]
   findPreyToKill =
     ($ []) $ fix $ \again acc !wnd →
       isPlaceCursorAtWindow wnd >>= \case
@@ -256,21 +237,21 @@ killPreviousInstanceIfExists dpy = go where
       slurpAllChildren acc !wnd =
         foldM slurpAllChildren (wnd : acc) =<< getChildWindows wnd
 
-  getChildWindows ∷ Window → IO [Window]
-  getChildWindows wnd = queryTree dpy wnd <&> \(_, _, x) → x
+  getChildWindows ∷ Xlib.Window → IO [Xlib.Window]
+  getChildWindows wnd = XlibExtras.queryTree dpy wnd <&> \(_, _, x) → x
 
-  isPlaceCursorAtWindow ∷ Window → IO Bool
+  isPlaceCursorAtWindow ∷ Xlib.Window → IO Bool
   isPlaceCursorAtWindow wnd = x where
     x = try matchByWindowClass <&> either (const False ∷ IOError → Bool) id
 
     matchByWindowClass =
-      getTextProperty dpy wnd wM_CLASS
-      >>= tp_value • peekCString
+      XlibExtras.getTextProperty dpy wnd Xlib.wM_CLASS
+      >>= XlibExtras.tp_value • peekCString
       >>= (≡ windowClassName) • pure
 
 
 -- | Get info about screen either under cursor or specified by an argument.
-getScreenInfo ∷ Display → Maybe SpecificScreenNumber → IO XineramaScreenInfo
+getScreenInfo ∷ Xlib.Display → Maybe SpecificScreenNumber → IO Xinerama.XineramaScreenInfo
 getScreenInfo dpy specificScreen = go where
   xineramaFailureMsg = unwords
     [ "Could not obtain Xinerama screens information,"
@@ -278,26 +259,27 @@ getScreenInfo dpy specificScreen = go where
     , "and Xinerama X11 extension is active!"
     ]
 
-  isSpecifiedScreen ∷ SpecificScreenNumber → XineramaScreenInfo → Bool
+  isSpecifiedScreen ∷ SpecificScreenNumber → Xinerama.XineramaScreenInfo → Bool
   isSpecifiedScreen (SpecificScreenNumber (toInteger • fromInteger → n)) =
-    xsi_screen_number • (≡ n)
+    Xinerama.xsi_screen_number • (≡ n)
 
-  isScreenUnderCursor ∷ (Integer, Integer) → XineramaScreenInfo → Bool
+  isScreenUnderCursor ∷ (Integer, Integer) → Xinerama.XineramaScreenInfo → Bool
   isScreenUnderCursor (mX, mY) screenInfo = x where
     f        = fromIntegral
-    (x1, y1) = (f (xsi_x_org screenInfo),      f (xsi_y_org screenInfo))
-    (x2, y2) = (x1 + f (xsi_width screenInfo), y1 + f (xsi_height screenInfo))
+    (x1, y1) = (f (Xinerama.xsi_x_org screenInfo),      f (Xinerama.xsi_y_org screenInfo))
+    (x2, y2) = (x1 + f (Xinerama.xsi_width screenInfo), y1 + f (Xinerama.xsi_height screenInfo))
     x        = (mX ≥ x1 ∧ mY ≥ y1) ∧ (mX < x2 ∧ mY < y2)
 
   go = do
     screens ←
-      xineramaQueryScreens dpy >>=
+      Xinerama.xineramaQueryScreens dpy >>=
         maybe (fail xineramaFailureMsg) pure
 
-    (predicateFn ∷ XineramaScreenInfo → Bool, failureMsg ∷ String) ←
+    (predicateFn ∷ Xinerama.XineramaScreenInfo → Bool, failureMsg ∷ String) ←
       case specificScreen of
            Nothing → do
-             mouseCoords ← mousePos dpy (defaultRootWindow dpy) <&> (fromIntegral *** fromIntegral)
+             mouseCoords ←
+               mousePos dpy (Xlib.defaultRootWindow dpy) <&> (fromIntegral *** fromIntegral)
 
              let
                failureMsg = unwords
@@ -323,99 +305,101 @@ getScreenInfo dpy specificScreen = go where
 
 windowInstance
   ∷ IO ()
-  → [(KeyCode, (Position, Position))]
-  → (Letter, (Position, Position))
+  → [(Xlib.KeyCode, (Xlib.Position, Xlib.Position))]
+  → (Letter, (Xlib.Position, Xlib.Position))
   → IO ()
 
 windowInstance done places (letter, (wndX, wndY)) = do
 
-  dpy ← openDisplay ""
+  dpy ← Xlib.openDisplay ""
 
   let
-    rootWnd = defaultRootWindow dpy
-    screen  = defaultScreen     dpy
-    gc      = defaultGC         dpy screen
-    blackPx = blackPixel        dpy screen
-    whitePx = whitePixel        dpy screen
+    rootWnd = Xlib.defaultRootWindow dpy
+    screen  = Xlib.defaultScreen     dpy
+    gc      = Xlib.defaultGC         dpy screen
+    blackPx = Xlib.blackPixel        dpy screen
+    whitePx = Xlib.whitePixel        dpy screen
 
-  setLineAttributes dpy gc 3 0 0 0 -- Increase line thickness
-  setForeground dpy gc whitePx
+  Xlib.setLineAttributes dpy gc 3 0 0 0 -- Increase line thickness
+  Xlib.setForeground dpy gc whitePx
 
   let
-    placeAt ∷ Position → Position → IO ()
+    placeAt ∷ Xlib.Position → Xlib.Position → IO ()
     placeAt = placeCursorAt dpy rootWnd
 
-  wnd ← createSimpleWindow dpy rootWnd 0 0 w h 0 whitePx blackPx
+  wnd ← Xlib.createSimpleWindow dpy rootWnd 0 0 w h 0 whitePx blackPx
   shPtr ← allocSH
   xSetWMNormalHints dpy wnd shPtr
-  xSetWMSizeHints dpy wnd shPtr $ pMinSizeBit .|. pMaxSizeBit
+  xSetWMSizeHints dpy wnd shPtr $ XlibExtras.pMinSizeBit .|. XlibExtras.pMaxSizeBit
 
-  storeName dpy wnd $ "Place Cursor At [" ⧺ show letter ⧺ "]"
-  changeProperty8 dpy wnd wM_CLASS sTRING propModeReplace $ castCharToCChar <$> windowClassName
+  Xlib.storeName dpy wnd $ "Place Cursor At [" ⧺ show letter ⧺ "]"
+  XlibExtras.changeProperty8 dpy wnd Xlib.wM_CLASS Xlib.sTRING XlibExtras.propModeReplace $
+    castCharToCChar <$> windowClassName
 
-  mapWindow dpy wnd
+  Xlib.mapWindow dpy wnd
   placeWindowAt dpy wnd wndX wndY
 
-  selectInput dpy wnd $ keyPressMask .|. exposureMask
-  () <$ allocaXEvent (forever ∘ evLoop done dpy wnd gc placeAt letter places)
+  Xlib.selectInput dpy wnd $ Xlib.keyPressMask .|. Xlib.exposureMask
+  () <$ Xlib.allocaXEvent (forever ∘ evLoop done dpy wnd gc placeAt letter places)
 
 
-allocSH ∷ IO (Ptr SizeHints)
+allocSH ∷ IO (Ptr XlibExtras.SizeHints)
 allocSH = go where
   go = malloc >>= unsafeForeignPtrToPtr • \ptr → ptr <$ poke ptr sh
 
-  malloc ∷ IO (ForeignPtr SizeHints)
+  malloc ∷ IO (ForeignPtr XlibExtras.SizeHints)
   malloc = mallocForeignPtr
 
-  sh ∷ SizeHints
-  sh = SizeHints
-    { sh_min_size    = Just (w, h)
-    , sh_max_size    = Just (w, h)
-    , sh_resize_inc  = Nothing
-    , sh_aspect      = Nothing
-    , sh_base_size   = Nothing
-    , sh_win_gravity = Nothing
+  sh ∷ XlibExtras.SizeHints
+  sh = XlibExtras.SizeHints
+    { XlibExtras.sh_min_size    = Just (w, h)
+    , XlibExtras.sh_max_size    = Just (w, h)
+    , XlibExtras.sh_resize_inc  = Nothing
+    , XlibExtras.sh_aspect      = Nothing
+    , XlibExtras.sh_base_size   = Nothing
+    , XlibExtras.sh_win_gravity = Nothing
     }
 
 
-mousePos ∷ Display → Window → IO (Integer, Integer)
-mousePos dpy wnd = f <$> queryPointer dpy wnd
+mousePos ∷ Xlib.Display → Xlib.Window → IO (Integer, Integer)
+mousePos dpy wnd = f <$> Xlib.queryPointer dpy wnd
   where f (_, _, _, rootX, rootY, _, _, _) = (toInteger rootX, toInteger rootY)
 
 
-placeWindowAt ∷ Display → Window → Position → Position → IO ()
-placeWindowAt dpy wnd x y = moveResizeWindow dpy wnd x y w h
+placeWindowAt ∷ Xlib.Display → Xlib.Window → Xlib.Position → Xlib.Position → IO ()
+placeWindowAt dpy wnd x y = Xlib.moveResizeWindow dpy wnd x y w h
 
-placeCursorAt ∷ Display → Window → Position → Position → IO ()
-placeCursorAt dpy wnd x y = f where f = warpPointer dpy wnd wnd 0 0 0 0 x y
+placeCursorAt ∷ Xlib.Display → Xlib.Window → Xlib.Position → Xlib.Position → IO ()
+placeCursorAt dpy wnd x y = f where f = Xlib.warpPointer dpy wnd wnd 0 0 0 0 x y
 
 
 evLoop
   ∷ IO ()
-  → Display → Window → GC
-  → (Position → Position → IO ())
+  → Xlib.Display → Xlib.Window → Xlib.GC
+  → (Xlib.Position → Xlib.Position → IO ())
   → Letter
-  → [(KeyCode, (Position, Position))]
-  → XEventPtr
+  → [(Xlib.KeyCode, (Xlib.Position, Xlib.Position))]
+  → Xlib.XEventPtr
   → IO ()
 
 evLoop done dpy wnd gc placeAt letter places evPtr = do
-  nextEvent dpy evPtr
-  evType ← get_EventType evPtr
+  Xlib.nextEvent dpy evPtr
+  evType ← Xlib.get_EventType evPtr
   let getKeyCode (_, _, _, _, _, _, _, _, keyCode, _) = keyCode
 
   if
-   | evType ≡ keyPress → get_KeyEvent evPtr >>= getKeyCode • handleKey done placeAt places letter
-   | evType ≡ expose   → draw dpy wnd gc letter
-   | otherwise         → pure ()
+   | evType ≡ Xlib.keyPress →
+       Xlib.get_KeyEvent evPtr >>= getKeyCode • handleKey done placeAt places letter
+   | evType ≡ Xlib.expose → draw dpy wnd gc letter
+   | otherwise → pure ()
 
 
 handleKey
   ∷ IO ()
-  → (Position → Position → IO ())
-  → [(KeyCode, (Position, Position))]
+  → (Xlib.Position → Xlib.Position → IO ())
+  → [(Xlib.KeyCode, (Xlib.Position, Xlib.Position))]
   → Letter
-  → KeyCode
+  → Xlib.KeyCode
   → IO ()
 
 handleKey done placeAt places letter keyCode
@@ -429,29 +413,29 @@ handleKey done placeAt places letter keyCode
 
 
 data LinePointsRelativity = Absolute | Relative deriving stock (Eq, Show)
-data Line = Line LinePointsRelativity [Point] deriving stock (Eq, Show)
+data Line = Line LinePointsRelativity [Xlib.Point] deriving stock (Eq, Show)
 
-draw ∷ Display → Window → GC → Letter → IO ()
+draw ∷ Xlib.Display → Xlib.Window → Xlib.GC → Letter → IO ()
 draw dpy wnd gc (letterToLines → linesToRender) =
   forM_ linesToRender $ \(Line rel points) →
     let
-      f n rescale = (round ∷ Rational → Position) ∘ rescale ∘ fromIntegral $ n
+      f n rescale = (round ∷ Rational → Xlib.Position) ∘ rescale ∘ fromIntegral $ n
 
-      rescaledPoints = points <&> \(Point x y) →
-        Point
+      rescaledPoints = points <&> \(Xlib.Point x y) →
+        Xlib.Point
           (f x (× ((pred w - letterPaddingX × 2) ÷ 100)))
           (f y (× ((pred h - letterPaddingY × 2) ÷ 100)))
 
       coordMode = case rel of
-        Absolute → coordModeOrigin
-        Relative → coordModePrevious
+        Absolute → Xlib.coordModeOrigin
+        Relative → Xlib.coordModePrevious
 
       shiftPadding = case rel of
         Absolute → fmap shift
         Relative → \case (x : xs) → shift x : xs; [] → []
-        where shift (Point x y) = Point (x + letterPaddingX) (y + letterPaddingY)
+        where shift (Xlib.Point x y) = Xlib.Point (x + letterPaddingX) (y + letterPaddingY)
     in
-      drawLines dpy wnd gc (shiftPadding rescaledPoints) coordMode
+      Xlib.drawLines dpy wnd gc (shiftPadding rescaledPoints) coordMode
 
 -- | Manually draw letters using simple lines.
 --
@@ -459,107 +443,107 @@ draw dpy wnd gc (letterToLines → linesToRender) =
 letterToLines ∷ Letter → [Line]
 letterToLines = \case
   Q → [ Line Absolute $ let spacer = 0 in
-          [ Point roundCorner 0
-          , Point (100 - roundCorner) 0
-          , Point 100 roundCorner
-          , Point 100 (100 - roundCorner - spacer)
-          , Point (100 - roundCorner) (100 - spacer)
-          , Point roundCorner (100 - spacer)
-          , Point 0 (100 - spacer - roundCorner)
-          , Point 0 roundCorner
-          , Point roundCorner 0
+          [ Xlib.Point roundCorner 0
+          , Xlib.Point (100 - roundCorner) 0
+          , Xlib.Point 100 roundCorner
+          , Xlib.Point 100 (100 - roundCorner - spacer)
+          , Xlib.Point (100 - roundCorner) (100 - spacer)
+          , Xlib.Point roundCorner (100 - spacer)
+          , Xlib.Point 0 (100 - spacer - roundCorner)
+          , Xlib.Point 0 roundCorner
+          , Xlib.Point roundCorner 0
           ]
       , Line Relative
-          [ Point 105 125
-          , Point (-50) (-50)
+          [ Xlib.Point 105 125
+          , Xlib.Point (-50) (-50)
           ]
       ]
   W → [ Line Absolute
-          [ Point 0 0
-          , Point 0 100
-          , Point 50 55
-          , Point 100 100
-          , Point 100 0
+          [ Xlib.Point 0 0
+          , Xlib.Point 0 100
+          , Xlib.Point 50 55
+          , Xlib.Point 100 100
+          , Xlib.Point 100 0
           ]
       ]
   E → [ Line Absolute
-          [ Point 110 0
-          , Point 0 0
-          , Point 0 45
-          , Point 110 45
+          [ Xlib.Point 110 0
+          , Xlib.Point 0 0
+          , Xlib.Point 0 45
+          , Xlib.Point 110 45
           ]
       , Line Absolute
-          [ Point 0 50
-          , Point 0 100
-          , Point 110 100
+          [ Xlib.Point 0 50
+          , Xlib.Point 0 100
+          , Xlib.Point 110 100
           ]
       ]
   A → [ Line Absolute
-          [ Point 0 110
-          , Point 0 roundCorner
-          , Point roundCorner 0
-          , Point (100 - roundCorner) 0
-          , Point 100 roundCorner
-          , Point 100 110
+          [ Xlib.Point 0 110
+          , Xlib.Point 0 roundCorner
+          , Xlib.Point roundCorner 0
+          , Xlib.Point (100 - roundCorner) 0
+          , Xlib.Point 100 roundCorner
+          , Xlib.Point 100 110
           ]
       , Line Absolute
-          [ Point 0 60
-          , Point 100 60
+          [ Xlib.Point 0 60
+          , Xlib.Point 100 60
           ]
       ]
   S → [ Line Absolute
-          [ Point 100 roundCorner
-          , Point (100 - roundCorner) 0
-          , Point roundCorner 0
-          , Point 0 roundCorner
-          , Point 0 (48 - roundCorner)
-          , Point roundCorner 48
-          , Point (100 - roundCorner) 48
-          , Point 100 (48 + roundCorner)
-          , Point 100 (100 - roundCorner)
-          , Point (100 - roundCorner) 100
-          , Point roundCorner 100
-          , Point 0 (100 - roundCorner)
+          [ Xlib.Point 100 roundCorner
+          , Xlib.Point (100 - roundCorner) 0
+          , Xlib.Point roundCorner 0
+          , Xlib.Point 0 roundCorner
+          , Xlib.Point 0 (48 - roundCorner)
+          , Xlib.Point roundCorner 48
+          , Xlib.Point (100 - roundCorner) 48
+          , Xlib.Point 100 (48 + roundCorner)
+          , Xlib.Point 100 (100 - roundCorner)
+          , Xlib.Point (100 - roundCorner) 100
+          , Xlib.Point roundCorner 100
+          , Xlib.Point 0 (100 - roundCorner)
           ]
       ]
   D → [ Line Absolute $
-          let roundCorner' = (round ∷ Rational → Position) (fromIntegral roundCorner × (3/2)) in
-          [ Point 0 0
-          , Point 0 100
-          , Point (100 - roundCorner') 100
-          , Point 100 (100 - roundCorner')
-          , Point 100 roundCorner'
-          , Point (100 - roundCorner') 0
-          , Point 0 0
+          let roundCorner' = (round ∷ Rational → Xlib.Position) (fromIntegral roundCorner × (3/2)) in
+          [ Xlib.Point 0 0
+          , Xlib.Point 0 100
+          , Xlib.Point (100 - roundCorner') 100
+          , Xlib.Point 100 (100 - roundCorner')
+          , Xlib.Point 100 roundCorner'
+          , Xlib.Point (100 - roundCorner') 0
+          , Xlib.Point 0 0
           ]
       ]
   Z → [ Line Absolute
-          [ Point 0 0
-          , Point 90 0
-          , Point 5 100
-          , Point 105 100
+          [ Xlib.Point 0 0
+          , Xlib.Point 90 0
+          , Xlib.Point 5 100
+          , Xlib.Point 105 100
           ]
       ]
   X → [ Line Absolute
-          [ Point 0 0
-          , Point 103 103
+          [ Xlib.Point 0 0
+          , Xlib.Point 103 103
           ]
       , Line Absolute
-          [ Point 0 100
-          , Point 103 (-3)
+          [ Xlib.Point 0 100
+          , Xlib.Point 103 (-3)
           ]
       ]
   C → [ Line Absolute
-          [ Point 100 (roundCorner + 8)
-          , Point 100 roundCorner
-          , Point (100 - roundCorner) 0
-          , Point roundCorner 0
-          , Point 0 roundCorner
-          , Point 0 (100 - roundCorner)
-          , Point roundCorner 100
-          , Point (100 - roundCorner) 100
-          , Point 100 (100 - roundCorner)
-          , Point 100 (100 - (roundCorner + 8))
+          [ Xlib.Point 100 (roundCorner + 8)
+          , Xlib.Point 100 roundCorner
+          , Xlib.Point (100 - roundCorner) 0
+          , Xlib.Point roundCorner 0
+          , Xlib.Point 0 roundCorner
+          , Xlib.Point 0 (100 - roundCorner)
+          , Xlib.Point roundCorner 100
+          , Xlib.Point (100 - roundCorner) 100
+          , Xlib.Point 100 (100 - roundCorner)
+          , Xlib.Point 100 (100 - (roundCorner + 8))
           ]
       ]
   where roundCorner = 12
