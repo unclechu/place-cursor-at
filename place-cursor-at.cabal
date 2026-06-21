@@ -1,10 +1,10 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.35.2.
+-- This file has been generated from package.yaml by hpack version 0.38.3.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 324a21a84789db00ffbb106c7f92015b30a603fd12023aac38cd1f6574aec48f
+-- hash: ed0b2a5bd3e6c6c9a9f7fae0dc9885073f69ecba12bdf2888d8cf6faa748d08d
 
 name:           place-cursor-at
 version:        1.0.1
@@ -18,7 +18,7 @@ copyright:      Copyright © 2017–2026 Viacheslav Lotsmanov
 license:        GPL-3
 license-file:   LICENSE
 tested-with:
-    GHC == 8.10.4 || == 8.8.4 || == 8.6.4 || == 9.2.7
+    GHC == 8.10.4 || == 8.8.4 || == 8.6.4 || == 9.2.7 || == 9.10.3
 build-type:     Simple
 extra-source-files:
     README.md
