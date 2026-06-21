@@ -11,4 +11,5 @@ watch_file default.nix
 watch_file shell.nix
 for file in nix/*.{nix,json}; do watch_file -- "$file"; done
 
+# Do not build `place-cursor-at` executable for the nix-shell
 use nix --arg buildExecutable false
