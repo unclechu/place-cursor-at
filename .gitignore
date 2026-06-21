@@ -8,3 +8,8 @@ cabal.sandbox.config
 .stack-work
 
 .lvimrc
+
+# GHC build artifacts
+src/place-cursor-at
+src/*.hi
+src/*.o
