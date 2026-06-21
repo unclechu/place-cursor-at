@@ -6,6 +6,7 @@
 -- License: GNU/GPLv3 https://raw.githubusercontent.com/unclechu/place-cursor-at/master/LICENSE
 
 {-# OPTIONS_GHC -Wall -fprint-potential-instances #-}
+{--# OPTIONS_GHC -threaded -rtsopts -with-rtsopts=-N #-}
 {-# LANGUAGE GHC2024, UnicodeSyntax, MultiWayIf, ViewPatterns #-}
 
 import Prelude.Unicode ((∘), (÷), (≡), (⧺), (∧), (≥))
@@ -42,12 +43,21 @@ foreign import ccall unsafe "XlibExtras.h XSetWMSizeHints"
   xSetWMSizeHints ∷ Xlib.Display → Xlib.Window → Ptr XlibExtras.SizeHints → Int → IO ()
 
 
-s, w, h, letterPaddingX, letterPaddingY, offsetPercent ∷ Num a ⇒ a
-s = 40; w = s; h = s
-letterPaddingX = 10; letterPaddingY = 10
-offsetPercent = 10
+scale, s, w, h, letterPaddingX, letterPaddingY, offsetPercent ∷ Rational
+scale = 1 -- Scaling coefficient
+s = 40 * scale -- Size of the letter box window (pixels)
+w = s; h = s
+letterPaddingX = 10 * scale -- Horizontal letter box window padding (pixels)
+letterPaddingY = 10 * scale -- Vertical letter box window padding (pixels)
+offsetPercent = 10 -- Padding relative to the screen (percents of the screen size)
+
+-- | Round the number from above values
+sr ∷ Integral n ⇒ Rational → n
+sr = round
+{-# INLINE sr #-}
 
 
+-- | X11 window class name
 windowClassName ∷ String
 windowClassName = "place-cursor-at"
 
@@ -110,9 +120,9 @@ getAbstractPosY = \case
 
 abstractPosToCoordinate ∷ Fractional a ⇒ a → AbstractPos → a
 abstractPosToCoordinate x = \case
-  MinPos    → x × offsetPercent ÷ 100
+  MinPos    → x × fromRational offsetPercent ÷ 100
   MiddlePos → x ÷ 2
-  MaxPos    → x × (100 - offsetPercent) ÷ 100
+  MaxPos    → x × (100 - fromRational offsetPercent) ÷ 100
 
 
 -- | Command-line arguments
@@ -326,7 +336,7 @@ windowInstance done places (letter, (wndX, wndY)) = do
     placeAt ∷ Xlib.Position → Xlib.Position → IO ()
     placeAt = placeCursorAt dpy rootWnd
 
-  wnd ← Xlib.createSimpleWindow dpy rootWnd 0 0 w h 0 whitePx blackPx
+  wnd ← Xlib.createSimpleWindow dpy rootWnd 0 0 (sr w) (sr h) 0 whitePx blackPx
   shPtr ← allocSH
   xSetWMNormalHints dpy wnd shPtr
   xSetWMSizeHints dpy wnd shPtr $ XlibExtras.pMinSizeBit .|. XlibExtras.pMaxSizeBit
@@ -351,8 +361,8 @@ allocSH = go where
 
   sh ∷ XlibExtras.SizeHints
   sh = XlibExtras.SizeHints
-    { XlibExtras.sh_min_size    = Just (w, h)
-    , XlibExtras.sh_max_size    = Just (w, h)
+    { XlibExtras.sh_min_size    = Just (sr w, sr h)
+    , XlibExtras.sh_max_size    = Just (sr w, sr h)
     , XlibExtras.sh_resize_inc  = Nothing
     , XlibExtras.sh_aspect      = Nothing
     , XlibExtras.sh_base_size   = Nothing
@@ -366,7 +376,7 @@ mousePos dpy wnd = f <$> Xlib.queryPointer dpy wnd
 
 
 placeWindowAt ∷ Xlib.Display → Xlib.Window → Xlib.Position → Xlib.Position → IO ()
-placeWindowAt dpy wnd x y = Xlib.moveResizeWindow dpy wnd x y w h
+placeWindowAt dpy wnd x y = Xlib.moveResizeWindow dpy wnd x y (sr w) (sr h)
 
 placeCursorAt ∷ Xlib.Display → Xlib.Window → Xlib.Position → Xlib.Position → IO ()
 placeCursorAt dpy wnd x y = f where f = Xlib.warpPointer dpy wnd wnd 0 0 0 0 x y
@@ -432,7 +442,7 @@ draw dpy wnd gc (letterToLines → linesToRender) =
       shiftPadding = case rel of
         Absolute → fmap shift
         Relative → \case (x : xs) → shift x : xs; [] → []
-        where shift (Xlib.Point x y) = Xlib.Point (x + letterPaddingX) (y + letterPaddingY)
+        where shift (Xlib.Point x y) = Xlib.Point (x + sr letterPaddingX) (y + sr letterPaddingY)
     in
       Xlib.drawLines dpy wnd gc (shiftPadding rescaledPoints) coordMode
 
