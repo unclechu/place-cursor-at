@@ -2,11 +2,14 @@
 
 ## 2.0.0 (WIP)
 
-- TODO: Render usage info for `help`/`--help`/`-h`/`-?` or for unrecognized argument
-- TODO: Add `--scale=1` support
-- TODO: Add `--offset=10` support
-- TODO: Daemon mode (X11 IPC)
-- TODO: Custom keys mapping
+### New features
+
+- Render usage info for `help`/`--help`/`-h`/`-?` or for unrecognized argument
+- **TODO:** Allow swapping letters in the POS argument (e.g. LT = TL)
+- **TODO:** Add `--scale=1` support
+- **TODO:** Add `--offset=10` support
+- **TODO:** Daemon mode (X11 IPC)
+- **TODO:** Custom keys mapping
 
 ### Technical nuances
 

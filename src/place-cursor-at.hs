@@ -7,34 +7,35 @@
 
 {-# OPTIONS_GHC -Wall -fprint-potential-instances #-}
 {--# OPTIONS_GHC -threaded -rtsopts -with-rtsopts=-N #-}
-{-# LANGUAGE GHC2024, UnicodeSyntax, MultiWayIf, ViewPatterns #-}
+{-# LANGUAGE GHC2024, UnicodeSyntax, MultiWayIf, ViewPatterns, OverloadedRecordDot #-}
 
 import Prelude.Unicode ((∘), (÷), (≡), (⧺), (∧), (≥))
 
+import Control.Arrow ((***), (&&&))
+import Control.Concurrent (forkFinally)
+import Control.Concurrent.MVar (newEmptyMVar, putMVar, readMVar)
+import Control.Exception (SomeException, try, throwIO)
+import Control.Monad (forever, forM_, foldM, void, when)
 import Data.Bifunctor (first)
 import Data.Bits ((.|.))
 import Data.Char (toUpper)
 import Data.Function (fix)
 import Data.Functor ((<&>))
 import Data.List (find)
-import qualified Numeric.Natural as N
-import Text.ParserCombinators.ReadP (satisfy)
-import Text.Read (ReadPrec, Read (readPrec), lift, choice, readMaybe)
-import Control.Applicative ((<|>))
-import Control.Arrow ((***), (&&&))
-import Control.Concurrent (forkFinally)
-import Control.Concurrent.MVar (newEmptyMVar, putMVar, readMVar)
-import Control.Exception (SomeException, try, throwIO)
-import Control.Monad (forever, forM_, foldM, void)
-import System.Environment (getArgs)
-import qualified Graphics.X11.Xlib as Xlib
-import qualified Graphics.X11.Xlib.Extras as XlibExtras
-import qualified Graphics.X11.Xinerama as Xinerama
 import Foreign.C.String (castCharToCChar, peekCString)
 import Foreign.ForeignPtr (ForeignPtr, mallocForeignPtr)
 import Foreign.ForeignPtr.Unsafe (unsafeForeignPtrToPtr)
 import Foreign.Ptr (Ptr)
 import Foreign.Storable (Storable (poke))
+import qualified Graphics.X11.Xinerama as Xinerama
+import qualified Graphics.X11.Xlib as Xlib
+import qualified Graphics.X11.Xlib.Extras as XlibExtras
+import qualified Numeric.Natural as N
+import qualified System.Environment as SysEnv
+import qualified System.Exit as SysExit
+import qualified System.IO as SysIO
+import Text.ParserCombinators.ReadP (satisfy)
+import Text.Read (ReadPrec, Read (readPrec), lift, choice, readMaybe)
 
 foreign import ccall unsafe "XlibExtras.h XSetWMNormalHints"
   xSetWMNormalHints ∷ Xlib.Display → Xlib.Window → Ptr XlibExtras.SizeHints → IO ()
@@ -128,14 +129,20 @@ abstractPosToCoordinate x = \case
 -- | Command-line arguments
 data Argv
    = Argv
-   { argvOnDisplay  ∷ Maybe SpecificScreenNumber
+   { argv_onDisplay ∷ Maybe SpecificScreenNumber
    -- ^ Jump to specific display
-   , argvToPosition ∷ Maybe Pos
+   , argv_toPosition ∷ Maybe Pos
    -- ^ Jump to specific position on screen (GUI wont be shown)
+   , argv_showHelp ∷ Bool
+   -- ^ Show usage info
    } deriving stock (Show, Eq)
 
-emptyArgv ∷ Argv
-emptyArgv = Argv Nothing Nothing
+defaultArgv ∷ Argv
+defaultArgv = Argv
+  { argv_onDisplay = Nothing
+  , argv_toPosition = Nothing
+  , argv_showHelp = False
+  }
 
 
 -- | Screen number that starts with 0.
@@ -163,23 +170,107 @@ instance Read SpecificScreenNumber where
       else pure ∘ pred ∘ SpecificScreenNumber $ x
 
 
+usageInfo ∷ FilePath → [String]
+usageInfo progName =
+  [ "place-cursor-at"
+  , ""
+  , "A utility for X11 that moves the mouse cursor to an approximate position"
+  , "using your keyboard, or directly from the command line. It helps reduce the"
+  , "need to move the mouse manually. This makes it easier to use a trackpoint or"
+  , "cursor-movement controls built into your keyboard by jumping the cursor closer"
+  , "to where you need it."
+  , ""
+  , "Usage: " <> progName <> " [OPTION] [SCREEN] [POS]"
+  , ""
+  , "All arguments are optional, and their order does not matter."
+  , "Arguments may be repeated; the latest argument wins."
+  , ""
+  , "Supported OPTIONs:"
+  , ""
+  , "  help|--help|-h|-?    Show this usage information"
+  , ""
+  , "SCREEN:"
+  , ""
+  , "  Jump to a specific screen."
+  , "  This is an integer number starting from 1."
+  , "  If you have 3 displays, it should be one of 1, 2, or 3."
+  , ""
+  , "  Example: jump to screen 2 and show the letter boxes there:"
+  , ""
+  , "      " <> progName <> " 2"
+  , ""
+  , "POS:"
+  , ""
+  , "  Jump to a position on the screen, either the current screen or the screen"
+  , "  specified by SCREEN, without showing the letter boxes."
+  , ""
+  , "  POS is case-insensitive."
+  , ""
+  , "  The cursor is placed at the center of the letter-box window, as if that"
+  , "  window had been rendered. Therefore, the configured offset still applies."
+  , ""
+  , "  POS is a pair of letters. The first letter specifies the horizontal"
+  , "  position, and the second letter specifies the vertical position."
+  , ""
+  , "  The first letter is one of: LCR (Left, Center, Right)."
+  , "  The second letter is one of: TCB (Top, Center, Bottom)."
+  , ""
+  , "  All POS variants:"
+  , ""
+  , "      LT — (L)eft-(T)op"
+  , "      LC — (L)eft-(C)enter"
+  , "      LB — (L)eft-(B)ottom"
+  , "      CT — (C)enter-(T)op"
+  , "      CC — (C)enter-(C)enter"
+  , "      CB — (C)enter-(B)ottom"
+  , "      RT — (R)ight-(T)op"
+  , "      RC — (R)ight-(C)enter"
+  , "      RB — (R)ight-(B)ottom"
+  , ""
+  , "  Example: move the mouse cursor to the top-right corner:"
+  , ""
+  , "      " <> progName <> " rt"
+  , "      " <> progName <> " RT"
+  , ""
+  , "  Example: jump to screen 2 and move the mouse cursor to the top-right corner:"
+  , ""
+  , "      " <> progName <> " 2 rt"
+  , "      " <> progName <> " 2 RT"
+  ]
+
+
 main ∷ IO ()
 main = do
   doneHandler ← mkDoneHandler
   (dpy, rootWnd) ← (id &&& Xlib.defaultRootWindow) <$> Xlib.openDisplay ""
   killPreviousInstanceIfExists dpy
 
-  (xsn, justGoToPos') ←
+  (argv, reverse → unrecognized) ←
     let
-      reducer argv x =
-        case (readMaybe x <&> \x' → argv { argvOnDisplay  = Just x' })
-         <|> (readMaybe x <&> \x' → argv { argvToPosition = Just x' })
-          of Just updatedArgv → pure updatedArgv
-             Nothing → fail $ "Unexpected argument: " ⧺ show x
+      reducer (argv, unrecognized) = \case
+        arg | arg `elem` ["help", "--help", "-h", "-?"] →
+          (argv { argv_showHelp = True }, unrecognized)
+        (readMaybe @SpecificScreenNumber → Just x) →
+          (argv { argv_onDisplay = Just x }, unrecognized)
+        (readMaybe @Pos → Just x) →
+          (argv { argv_toPosition = Just x }, unrecognized)
+        arg →
+          (argv, arg : unrecognized)
     in
-      (getArgs >>= foldM reducer emptyArgv) <&> (argvOnDisplay &&& argvToPosition)
+      SysEnv.getArgs <&> foldl' reducer (defaultArgv, [])
 
-  !xsi ← getScreenInfo dpy xsn
+  when (argv.argv_showHelp || (not ∘ null) unrecognized) $ do
+    if null unrecognized
+      then pure ()
+      else SysIO.hPutStrLn SysIO.stderr $ "Unrecognized arguments: " <> show unrecognized <> "\n"
+
+    SysEnv.getProgName >>=
+      SysIO.hPutStrLn (if null unrecognized then SysIO.stdout else SysIO.stderr)
+        ∘ unlines ∘ usageInfo
+
+    if null unrecognized then SysExit.exitSuccess else SysExit.exitFailure
+
+  !xsi ← getScreenInfo dpy argv.argv_onDisplay
 
   let
     xX, xY, xW, xH ∷ Rational
@@ -214,7 +305,7 @@ main = do
       in
         (pos, (toPosition x, toPosition y))
 
-  case justGoToPos' of
+  case argv.argv_toPosition of
        Just pos →
          case lookup pos places of
               Just (x, y) → do
